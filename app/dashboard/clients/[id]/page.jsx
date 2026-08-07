@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
-import { apiDownload, apiRequest, apiUpload, apiView } from "../../../../lib/api";
+import { apiDownload, apiRequest, apiUpload } from "../../../../lib/api";
 import ClientIntakeModal from "../../../../components/dashboard/ClientIntakeModal";
+import ProtectedFilePreviewModal, { useProtectedFilePreview } from "../../../../components/ProtectedFilePreviewModal";
 
 function formatDate(value) {
   if (!value) return "-";
@@ -76,6 +77,7 @@ export default function ClientDetailPage() {
   const [idUploadType, setIdUploadType] = useState("");
   const [idUploadFile, setIdUploadFile] = useState(null);
   const [canManageClientIds, setCanManageClientIds] = useState(false);
+  const { preview, openPreview, closePreview } = useProtectedFilePreview();
 
   async function load() {
     setLoading(true);
@@ -245,6 +247,7 @@ export default function ClientDetailPage() {
       documentId: row.id,
       documentCategory: row.category,
       title: row.title || row.file_name || `Document #${row.id}`,
+      fileName: row.file_name || row.title || `Document #${row.id}`,
       priority: "low",
       filing_date: row.updated_at || row.created_at,
       status: "active",
@@ -257,6 +260,7 @@ export default function ClientDetailPage() {
       documentId: row.id,
       documentCategory: "client_id",
       title: `${labelize(row.client_id_type || "other").replace("Driver Licence", "Driver's License")} · ${row.file_name || row.title || `Document #${row.id}`}`,
+      fileName: row.file_name || row.title || `Document #${row.id}`,
       priority: "low",
       filing_date: row.updated_at || row.created_at,
       status: "active",
@@ -361,25 +365,24 @@ export default function ClientDetailPage() {
     }
   }
 
-  async function openDocumentPreview(row) {
+  function openDocumentPreview(row) {
     setError("");
-    try {
-      await apiView(`/api/v1/clients/${id}/id-documents/${row.id}/view`);
-    } catch (err) {
-      setError(err.message || "Document could not be loaded");
-    }
+    void openPreview({
+      path: `/api/v1/clients/${id}/id-documents/${row.id}/view`,
+      downloadPath: `/api/v1/clients/${id}/id-documents/${row.id}/download`,
+      filename: row.file_name || row.title || `Document #${row.id}`,
+    });
   }
 
-  async function openTimelineDocument(row) {
+  function openTimelineDocument(row) {
     setError("");
     const path = row.documentCategory === "client_id"
       ? `/api/v1/clients/${id}/id-documents/${row.documentId}/view`
       : `/api/v1/documents/${row.documentId}/view`;
-    try {
-      await apiView(path);
-    } catch (err) {
-      setError(err.message || "Document could not be loaded");
-    }
+    const downloadPath = row.documentCategory === "client_id"
+      ? `/api/v1/clients/${id}/id-documents/${row.documentId}/download`
+      : `/api/v1/documents/${row.documentId}/download`;
+    void openPreview({ path, downloadPath, filename: row.fileName || row.title });
   }
 
   async function uploadIdDocument(event) {
@@ -903,6 +906,7 @@ export default function ClientDetailPage() {
           </div>
         </div>
       ) : null}
+      <ProtectedFilePreviewModal preview={preview} onClose={closePreview} />
     </section>
   );
 }

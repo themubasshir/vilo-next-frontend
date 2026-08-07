@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { apiDownload, apiRequest, apiUpload, apiView } from "../../../lib/api";
+import { apiDownload, apiRequest, apiUpload } from "../../../lib/api";
 import { getCachedUser } from "../../../lib/auth";
+import ProtectedFilePreviewModal, { useProtectedFilePreview } from "../../../components/ProtectedFilePreviewModal";
 
 const PRACTICE_TABS = [
   { value: "", label: "All Precedents" },
@@ -222,6 +223,7 @@ export default function PrecedentsPage() {
   const [practiceAreaOpen, setPracticeAreaOpen] = useState(false);
   const [practiceAreaName, setPracticeAreaName] = useState("");
   const [practiceAreaError, setPracticeAreaError] = useState("");
+  const { preview, openPreview, closePreview } = useProtectedFilePreview();
 
   const role = currentUser?.role || "";
   const canManage = roleCanManage(role);
@@ -483,14 +485,14 @@ export default function PrecedentsPage() {
     }
   }
 
-  async function handleView() {
+  function handleView() {
     if (!detail?.has_file) return;
     setDetailError("");
-    try {
-      await apiView(`/api/v1/precedents/${detail.id}/view`);
-    } catch (err) {
-      setDetailError(err.message || "Document could not be loaded");
-    }
+    void openPreview({
+      path: `/api/v1/precedents/${detail.id}/view`,
+      downloadPath: `/api/v1/precedents/${detail.id}/download`,
+      filename: detail.file_name || detail.name || `Precedent #${detail.id}`,
+    });
   }
 
   async function addPracticeArea(event) {
@@ -1064,6 +1066,7 @@ export default function PrecedentsPage() {
           </div>
         </div>
       ) : null}
+      <ProtectedFilePreviewModal preview={preview} onClose={closePreview} />
     </section>
   );
 }

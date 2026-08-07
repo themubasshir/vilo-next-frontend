@@ -2,9 +2,10 @@
 
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { apiDownload, apiRequest, apiUpload, apiView } from "../../../lib/api";
+import { apiDownload, apiRequest, apiUpload } from "../../../lib/api";
 import { getCachedUser } from "../../../lib/auth";
 import { DiscardChangesDialog, useModalCloseGuard } from "../../../components/useModalCloseGuard";
+import ProtectedFilePreviewModal, { useProtectedFilePreview } from "../../../components/ProtectedFilePreviewModal";
 
 const initialForm = {
   client_id: "",
@@ -92,6 +93,7 @@ function DocumentsPageContent() {
   const [filterFrom, setFilterFrom] = useState("");
   const [filterTo, setFilterTo] = useState("");
   const [uploaders, setUploaders] = useState([]);
+  const { preview, openPreview, closePreview } = useProtectedFilePreview();
   const [serverTotal, setServerTotal] = useState(0);
   const [serverTotalPages, setServerTotalPages] = useState(1);
   const onlyOfficeEditorRef = useRef(null);
@@ -596,6 +598,16 @@ function DocumentsPageContent() {
     router.replace(`${pathname}?${params.toString()}`);
   }
 
+  function openDocumentPreview(document) {
+    setMenuOpenId(null);
+    setError("");
+    void openPreview({
+      path: `/api/v1/documents/${document.id}/view`,
+      downloadPath: `/api/v1/documents/${document.id}/download`,
+      filename: document.file_name || document.title || `Document #${document.id}`,
+    });
+  }
+
   function closeUploadModal() {
     setForm({ ...initialForm, client_id: requestedClientId });
     setDragActive(false);
@@ -782,7 +794,7 @@ function DocumentsPageContent() {
                                 </button>
                                 {menuOpenId === document.id ? (
                                   <div className="case-actions-menu documents-actions-menu">
-                                    <button type="button" onClick={() => apiView(`/api/v1/documents/${document.id}/view`).catch((err) => setError(err.message || "Document could not be loaded"))}>View</button>
+                                    <button type="button" onClick={() => openDocumentPreview(document)}>View</button>
                                     <button type="button" onClick={() => apiDownload(`/api/v1/documents/${document.id}/download`).catch((err) => setError(err.message || "Download failed"))}>Download</button>
                                     {isDocxDocument(document) ? (
                                       <button type="button" onClick={() => openOnlyOfficeModal(document)}>Open in Word Editor</button>
@@ -1131,6 +1143,7 @@ function DocumentsPageContent() {
           </div>
         </div>
       ) : null}
+      <ProtectedFilePreviewModal preview={preview} onClose={closePreview} />
     </section>
   );
 }

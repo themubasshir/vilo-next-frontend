@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useState } from "react";
-import { apiRequest, apiUpload, apiView } from "../../../lib/api";
+import { apiRequest, apiUpload } from "../../../lib/api";
+import ProtectedFilePreviewModal, { useProtectedFilePreview } from "../../../components/ProtectedFilePreviewModal";
 import ClientIntakeModal from "../../../components/dashboard/ClientIntakeModal";
 
 function isArchived(client) {
@@ -61,6 +62,7 @@ function ClientsPageContent() {
   const [selectedDraft, setSelectedDraft] = useState(null);
   const [editClient, setEditClient] = useState(null);
   const [deleteClient, setDeleteClient] = useState(null);
+  const { preview, openPreview, closePreview } = useProtectedFilePreview();
 
   async function load() {
     setLoading(true);
@@ -376,7 +378,11 @@ function ClientsPageContent() {
         onSubmit={handleCreate}
         onSaveDraft={saveClientDraft}
         onDiscardDraft={discardClientDraft}
-        onViewDraftAttachment={() => apiView(`/api/v1/clients/intake-drafts/${selectedDraft.id}/attachment/view`)}
+        onViewDraftAttachment={() => openPreview({
+          path: `/api/v1/clients/intake-drafts/${selectedDraft.id}/attachment/view`,
+          downloadPath: `/api/v1/clients/intake-drafts/${selectedDraft.id}/attachment/download`,
+          filename: selectedDraft.attachment?.file_name || "Draft attachment",
+        })}
       />
 
       <ClientIntakeModal
@@ -406,6 +412,7 @@ function ClientsPageContent() {
           </div>
         </div>
       ) : null}
+      <ProtectedFilePreviewModal preview={preview} onClose={closePreview} />
     </section>
   );
 }
