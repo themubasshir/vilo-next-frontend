@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
-import { apiBlob, apiDownload, apiRequest, apiUpload } from "../../../../lib/api";
+import { apiDownload, apiRequest, apiUpload, apiView } from "../../../../lib/api";
 import ClientIntakeModal from "../../../../components/dashboard/ClientIntakeModal";
 
 function formatDate(value) {
@@ -72,10 +72,9 @@ export default function ClientDetailPage() {
   const [replaceNotes, setReplaceNotes] = useState("");
   const [versionTarget, setVersionTarget] = useState(null);
   const [versionRows, setVersionRows] = useState([]);
-  const [previewDoc, setPreviewDoc] = useState(null);
-  const [previewUrl, setPreviewUrl] = useState("");
-  const [previewLoading, setPreviewLoading] = useState(false);
-  const [previewError, setPreviewError] = useState("");
+  const [idUploadOpen, setIdUploadOpen] = useState(false);
+  const [idUploadType, setIdUploadType] = useState("");
+  const [idUploadFile, setIdUploadFile] = useState(null);
 
   async function load() {
     setLoading(true);
@@ -111,10 +110,6 @@ export default function ClientDetailPage() {
     if (id) load();
   }, [id]);
 
-  useEffect(() => () => {
-    if (previewUrl) URL.revokeObjectURL(previewUrl);
-  }, [previewUrl]);
-
   async function handleEdit(payload, idFile) {
     if (!client) return;
     setSaving(true);
@@ -128,6 +123,7 @@ export default function ClientDetailPage() {
       if (idFile) {
         const formData = new FormData();
         formData.append("file", idFile);
+        formData.append("id_type", "other");
         await apiUpload(`/api/v1/clients/${client.id}/id-documents`, formData);
       }
       setEditOpen(false);
@@ -244,12 +240,14 @@ export default function ClientDetailPage() {
 
     const documentRows = documents.map((row) => ({
       id: `doc-${row.id}`,
+      documentId: row.id,
+      documentCategory: row.category,
       title: row.title || row.file_name || `Document #${row.id}`,
       priority: "low",
       filing_date: row.updated_at || row.created_at,
       status: "active",
       type: "documents",
-      href: `/dashboard/documents`,
+      href: "",
     }));
 
     const notesRows = noteLines.map((line, index) => ({
@@ -350,37 +348,47 @@ export default function ClientDetailPage() {
   }
 
   async function openDocumentPreview(row) {
-    if (previewUrl) URL.revokeObjectURL(previewUrl);
-    const name = String(row.file_name || "").toLowerCase();
-    const ext = name.includes(".") ? name.split(".").pop() : "";
-    if (ext === "doc" || ext === "docx") {
-      setPreviewDoc({ ...row, previewType: "doc" });
-      setPreviewUrl("");
-      setPreviewError("");
-      setPreviewLoading(false);
-      return;
-    }
-
-    setPreviewDoc({ ...row, previewType: ext === "pdf" ? "pdf" : "image" });
-    setPreviewLoading(true);
-    setPreviewError("");
-    setPreviewUrl("");
+    setError("");
     try {
-      const blob = await apiBlob(`/api/v1/clients/${id}/id-documents/${row.id}/view`);
-      setPreviewUrl(URL.createObjectURL(blob));
+      await apiView(`/api/v1/clients/${id}/id-documents/${row.id}/view`);
     } catch (err) {
-      setPreviewError(err.message || "Document could not be loaded");
-    } finally {
-      setPreviewLoading(false);
+      setError(err.message || "Document could not be loaded");
     }
   }
 
-  function closePreview() {
-    if (previewUrl) URL.revokeObjectURL(previewUrl);
-    setPreviewUrl("");
-    setPreviewError("");
-    setPreviewLoading(false);
-    setPreviewDoc(null);
+  async function openTimelineDocument(row) {
+    setError("");
+    const path = row.documentCategory === "client_id"
+      ? `/api/v1/clients/${id}/id-documents/${row.documentId}/view`
+      : `/api/v1/documents/${row.documentId}/view`;
+    try {
+      await apiView(path);
+    } catch (err) {
+      setError(err.message || "Document could not be loaded");
+    }
+  }
+
+  async function uploadIdDocument(event) {
+    event.preventDefault();
+    if (!idUploadType || !idUploadFile) return;
+    setSaving(true);
+    setError("");
+    setSuccess("");
+    try {
+      const formData = new FormData();
+      formData.append("id_type", idUploadType);
+      formData.append("file", idUploadFile);
+      await apiUpload(`/api/v1/clients/${id}/id-documents`, formData);
+      setIdUploadOpen(false);
+      setIdUploadType("");
+      setIdUploadFile(null);
+      setSuccess("Identification document uploaded.");
+      await load();
+    } catch (err) {
+      setError(err.message || "Failed to upload identification document");
+    } finally {
+      setSaving(false);
+    }
   }
 
   function toggleTeamMember(userId) {
@@ -487,7 +495,9 @@ export default function ClientDetailPage() {
                           <td><span className={`vilo-badge vilo-badge--priority-${row.priority}`}>{row.priority}</span></td>
                           <td>{formatDate(row.filing_date)}</td>
                           <td><span className={`vilo-badge vilo-badge--${row.status}`}>{row.status}</span></td>
-                          <td>{row.href ? <Link href={row.href}>View</Link> : "-"}</td>
+                          <td>
+                            {row.documentId ? <button type="button" className="vilo-btn vilo-btn--ghost vilo-btn--xs" onClick={() => openTimelineDocument(row)}>View</button> : row.href ? <Link href={row.href}>View</Link> : "-"}
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -600,7 +610,10 @@ export default function ClientDetailPage() {
           </article>
 
           <article className="dashboard-card clients-list-card">
-            <div className="dashboard-card__header"><h2>ID Documents</h2></div>
+            <div className="dashboard-card__header">
+              <h2>Client IDs / Identification</h2>
+              <button className="vilo-btn vilo-btn--primary vilo-btn--xs" type="button" onClick={() => setIdUploadOpen(true)}>Add ID</button>
+            </div>
             <div className="clients-toolbar-row client-detail-toolbar-row">
               <input className="case-search-input" placeholder="Search" value={documentDraft} onChange={(e) => setDocumentDraft(e.target.value)} />
               <button className="vilo-btn vilo-btn--primary" type="button" onClick={() => setDocumentSearch(documentDraft)}>Search</button>
@@ -616,11 +629,12 @@ export default function ClientDetailPage() {
               {filteredIdDocuments.length ? (
                 <div className="vilo-table-wrap case-table-wrap">
                   <table className="team-table">
-                    <thead><tr><th>Name</th><th>Size</th><th>Last Modified</th><th>Actions</th></tr></thead>
+                    <thead><tr><th>ID Type</th><th>Filename</th><th>Size</th><th>Last Modified</th><th>Actions</th></tr></thead>
                     <tbody>
                       {filteredIdDocuments.map((row) => (
                         <tr key={row.id}>
-                          <td>{row.title || row.file_name || `Document #${row.id}`}</td>
+                          <td>{labelize(row.client_id_type || "other").replace("Driver Licence", "Driver's License")}</td>
+                          <td>{row.file_name || row.title || `Document #${row.id}`}</td>
                           <td>{row.file_size ? `${Math.ceil(row.file_size / 1024)} KB` : "-"}</td>
                           <td>{formatDate(row.created_at)}</td>
                           <td>
@@ -765,27 +779,35 @@ export default function ClientDetailPage() {
         </div>
       ) : null}
 
-      {previewDoc ? (
-        <div className="vilo-modal-overlay" onClick={closePreview}>
-          <div className="vilo-modal vilo-modal--doc-preview" onClick={(e) => e.stopPropagation()}>
+      {idUploadOpen ? (
+        <div className="vilo-modal-overlay" onClick={() => setIdUploadOpen(false)}>
+          <div className="vilo-modal" onClick={(e) => e.stopPropagation()}>
             <div className="vilo-modal__header">
-              <h3>Document Preview</h3>
-              <button type="button" className="vilo-btn vilo-btn--ghost vilo-btn--xs" onClick={closePreview}>Close</button>
+              <h3>Add Client ID</h3>
+              <button type="button" className="vilo-btn vilo-btn--ghost vilo-btn--xs" onClick={() => setIdUploadOpen(false)}>Close</button>
             </div>
             <div className="vilo-modal__body">
-              {previewLoading ? <p className="vilo-state vilo-state--loading">Preparing preview...</p> : null}
-              {previewError ? <p className="vilo-state vilo-state--error">{previewError}</p> : null}
-              {!previewLoading && !previewError && previewDoc.previewType === "doc" ? (
-                <div className="vilo-state-block">
-                  <p className="vilo-state">Preview is not available for DOC/DOCX files. Use download to view this file.</p>
+              <form className="vilo-form-grid" onSubmit={uploadIdDocument}>
+                <div>
+                  <label>ID Type</label>
+                  <select value={idUploadType} onChange={(event) => setIdUploadType(event.target.value)} required>
+                    <option value="">Select ID type</option>
+                    <option value="national_id">National ID</option>
+                    <option value="trn">TRN</option>
+                    <option value="passport">Passport</option>
+                    <option value="driver_licence">Driver's License</option>
+                    <option value="other">Other</option>
+                  </select>
                 </div>
-              ) : null}
-              {!previewLoading && !previewError && previewDoc.previewType === "image" && previewUrl ? (
-                <img src={previewUrl} alt={previewDoc.file_name || "ID document"} className="client-doc-preview-image" />
-              ) : null}
-              {!previewLoading && !previewError && previewDoc.previewType === "pdf" && previewUrl ? (
-                <iframe title={previewDoc.file_name || "PDF preview"} src={previewUrl} className="client-doc-preview-frame" />
-              ) : null}
+                <div>
+                  <label>File</label>
+                  <input type="file" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" onChange={(event) => setIdUploadFile(event.target.files?.[0] || null)} required />
+                </div>
+                <div className="vilo-table-actions">
+                  <button type="button" className="vilo-btn vilo-btn--secondary" onClick={() => setIdUploadOpen(false)}>Cancel</button>
+                  <button type="submit" className="vilo-btn vilo-btn--primary" disabled={saving || !idUploadType || !idUploadFile}>{saving ? "Uploading..." : "Upload ID"}</button>
+                </div>
+              </form>
             </div>
           </div>
         </div>

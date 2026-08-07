@@ -416,11 +416,6 @@ export default function CaseDetailPage() {
 
   const clientName = useMemo(() => clients.find((c) => c.id === item?.client_id)?.name || `#${item?.client_id || "-"}`, [clients, item]);
   const teamById = useMemo(() => new Map(team.map((member) => [Number(member.id), member])), [team]);
-  const expectedCompletion = useMemo(() => {
-    if (!tasks.length) return "-";
-    const sorted = [...tasks].filter((t) => t.due_date).sort((a, b) => new Date(a.due_date) - new Date(b.due_date));
-    return sorted[sorted.length - 1] ? fmtDate(sorted[sorted.length - 1].due_date) : "-";
-  }, [tasks]);
   const caseInvoiceTotals = useMemo(() => ({
     unpaid: invoices.reduce((sum, row) => sum + Number(row.balance_due || 0), 0),
     overdue: invoices.filter((row) => (row.display_status || row.status) === "overdue").reduce((sum, row) => sum + Number(row.balance_due || 0), 0),
@@ -443,10 +438,9 @@ export default function CaseDetailPage() {
               <div className="case-summary-box"><span>Client:</span><strong>{clientName}</strong></div>
               <div className="case-summary-box"><span>Case Type:</span><strong>{item.title || "-"}</strong></div>
               <div className="case-summary-box"><span>Filling Date:</span><strong>{fmtDate(item.created_at)}</strong></div>
-              <div className="case-summary-box"><span>Expected Completion:</span><strong>{expectedCompletion}</strong></div>
               <div className="case-summary-box"><span>Status:</span><strong><span className={`vilo-badge vilo-badge--${item.status}`}>{item.status}</span></strong></div>
               <div className="case-summary-box"><span>Priority:</span><strong><span className={`vilo-badge vilo-badge--priority-${item.priority}`}>{item.priority}</span></strong></div>
-              <div className="case-summary-box"><span>Expected Completion:</span><strong>{item.expected_completion_date || "Not set"}</strong></div>
+              <div className="case-summary-box"><span>Expected Completion:</span><strong>{item.expected_completion_date ? fmtDate(item.expected_completion_date) : "Not set"}</strong></div>
             </div>
             <div className="case-summary-description">
               <span>Description:</span>

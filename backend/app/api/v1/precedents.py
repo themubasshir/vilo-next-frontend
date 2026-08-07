@@ -29,7 +29,7 @@ from app.schemas.precedent import (
     PracticeAreaResponse,
 )
 from app.services.audit import log_audit_event
-from app.services.document_storage import build_text_filename, persist_file, resolve_stored_file, safe_original_name
+from app.services.document_storage import build_text_filename, persist_file, resolve_stored_file, resolved_media_type, safe_original_name
 from app.services.timeline import create_case_timeline_event
 
 router = APIRouter(prefix="/precedents", tags=["precedents"])
@@ -400,7 +400,7 @@ async def download_precedent(
     if not precedent.file_path or not precedent.file_name:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Precedent file not found")
     path = resolve_stored_file(precedent.file_path, PRECEDENT_STORAGE_ROOT)
-    return FileResponse(path=str(path), filename=precedent.file_name, media_type=precedent.file_type or "application/octet-stream")
+    return FileResponse(path=str(path), filename=precedent.file_name, media_type=resolved_media_type(precedent.file_name, precedent.file_type))
 
 
 @router.get("/{precedent_id}/view")
@@ -413,7 +413,7 @@ async def view_precedent(
     path = resolve_stored_file(precedent.file_path, PRECEDENT_STORAGE_ROOT)
     return FileResponse(
         path=str(path),
-        media_type=precedent.file_type or "application/octet-stream",
+        media_type=resolved_media_type(precedent.file_name, precedent.file_type),
         content_disposition_type="inline",
         filename=precedent.file_name or path.name,
     )

@@ -15,6 +15,7 @@ class DocumentResponse(BaseModel):
     file_type: str | None
     file_size: int | None
     category: str | None
+    client_id_type: str | None = None
     visibility: str
     version: int
     version_source: str | None = None

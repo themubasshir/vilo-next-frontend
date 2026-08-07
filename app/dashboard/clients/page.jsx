@@ -91,6 +91,7 @@ function ClientsPageContent() {
     if (!file) return;
     const formData = new FormData();
     formData.append("file", file);
+    formData.append("id_type", "other");
     await apiUpload(`/api/v1/clients/${clientId}/id-documents`, formData);
   }
 

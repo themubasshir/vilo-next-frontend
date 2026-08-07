@@ -1,5 +1,6 @@
 import os
 import re
+import mimetypes
 from pathlib import Path
 from uuid import uuid4
 
@@ -9,6 +10,7 @@ from fastapi import HTTPException, status
 ALLOWED_EXTENSIONS = {"pdf", "doc", "docx", "jpg", "jpeg", "png", "txt"}
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
+GENERIC_MEDIA_TYPES = {"", "application/octet-stream", "binary/octet-stream"}
 
 
 def safe_original_name(original: str) -> str:
@@ -70,6 +72,17 @@ def resolve_stored_file(file_reference: str | None, storage_root: Path) -> Path:
     if any(any(candidate.is_relative_to(root) for root in approved_roots) for candidate in candidates):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Stored file not found")
     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found")
+
+
+def resolved_media_type(file_name: str | None, stored_media_type: str | None) -> str:
+    """Resolve MIME from the validated display filename, then stored metadata."""
+    guessed, _encoding = mimetypes.guess_type(file_name or "")
+    if guessed:
+        return guessed
+    normalized = (stored_media_type or "").split(";", 1)[0].strip().lower()
+    if normalized not in GENERIC_MEDIA_TYPES:
+        return normalized
+    return "application/octet-stream"
 
 
 def build_text_filename(name: str, fallback_stem: str = "document") -> str:

@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile, status
 from fastapi.responses import FileResponse
 from sqlalchemy import inspect, or_, select
 from sqlalchemy.exc import IntegrityError, NoInspectionAvailable
@@ -26,12 +26,21 @@ from app.schemas.client import (
 )
 from app.services.audit import log_audit_event
 from app.services.document_storage import (
-    REPOSITORY_ROOT, persist_file, resolve_stored_file, safe_original_name, validate_extension,
+    REPOSITORY_ROOT, persist_file, resolve_stored_file, resolved_media_type, safe_original_name, validate_extension,
 )
 
 router = APIRouter(prefix="/clients", tags=["clients"])
 ALLOWED_STAFF = ["partner", "admin", "lawyer", "paralegal"]
 ALLOWED_EXTENSIONS = {"pdf", "doc", "docx", "jpg", "jpeg", "png"}
+CLIENT_ID_TYPES = {"national_id", "trn", "passport", "driver_licence", "other"}
+CLIENT_ID_TYPE_PREFIX = "Client ID type: "
+CLIENT_ID_TYPE_LABELS = {
+    "national_id": "National ID",
+    "trn": "TRN",
+    "passport": "Passport",
+    "driver_licence": "Driver's License",
+    "other": "Other",
+}
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 STORAGE_ROOT = Path("backend/storage/documents")
 DRAFT_STORAGE_ROOT = Path("backend/storage/client_intake_drafts")
@@ -125,11 +134,30 @@ def to_document_response(document: Document) -> DocumentResponse:
         file_type=document.file_type,
         file_size=document.file_size,
         category=document.category,
+        client_id_type=client_id_type_from_document(document),
         visibility=document.visibility,
         version=document.version,
         created_at=document.created_at,
         updated_at=document.updated_at,
     )
+
+
+def normalize_client_id_type(value: str | None) -> str:
+    normalized = (value or "").strip().lower()
+    if normalized not in CLIENT_ID_TYPES:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid ID type")
+    return normalized
+
+
+def client_id_type_from_document(document: Document) -> str | None:
+    if document.category != "client_id":
+        return None
+    description = (document.description or "").strip()
+    if description.startswith(CLIENT_ID_TYPE_PREFIX):
+        value = description.removeprefix(CLIENT_ID_TYPE_PREFIX).strip().lower()
+        if value in CLIENT_ID_TYPES:
+            return value
+    return "other"
 
 
 def _safe_original_name(original: str) -> str:
@@ -625,12 +653,15 @@ async def delete_client(
 @router.post("/{client_id}/id-documents", response_model=DocumentResponse)
 async def upload_client_id_document(
     client_id: int,
+    id_type: str = Form(default="other"),
     file: UploadFile = File(...),
     request: Request = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(role_guard(ALLOWED_STAFF)),
 ):
     client = await get_client_for_org(db, current_user.organization_id, client_id)
+    await require_client_id_access(db, current_user, client_id)
+    normalized_id_type = normalize_client_id_type(id_type)
 
     original_name = _safe_original_name(file.filename or "")
     ext = _validate_extension(original_name)
@@ -652,8 +683,8 @@ async def upload_client_id_document(
         client_id=client.id,
         case_id=None,
         uploaded_by=current_user.id,
-        title=f"ID Document - {original_name}",
-        description="Client identity document",
+        title=f"{CLIENT_ID_TYPE_LABELS[normalized_id_type]} - {original_name}",
+        description=f"{CLIENT_ID_TYPE_PREFIX}{normalized_id_type}",
         file_name=original_name,
         file_path=str(file_path),
         file_type=file.content_type,
@@ -674,7 +705,7 @@ async def upload_client_id_document(
         entity_type="document",
         entity_id=str(document.id),
         description=f"Client ID document uploaded: {document.file_name}",
-        metadata_json={"client_id": client.id},
+        metadata_json={"client_id": client.id, "id_type": normalized_id_type},
         ip_address=request.client.host if request and request.client else None,
         user_agent=request.headers.get("user-agent") if request else None,
     )
@@ -727,7 +758,8 @@ async def require_client_id_access(db: AsyncSession, current_user: User, client_
     if current_user.role.value in {"partner", "admin", "lawyer"}:
         return
     assigned_client = await db.scalar(
-        select(ClientAssignment.id).where(
+        select(ClientAssignment.id).join(Client, Client.id == ClientAssignment.client_id).where(
+            Client.organization_id == current_user.organization_id,
             ClientAssignment.client_id == client_id,
             ClientAssignment.user_id == current_user.id,
         )
@@ -752,10 +784,10 @@ async def download_client_id_document(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(role_guard(ALLOWED_STAFF)),
 ):
-    await require_client_id_access(db, current_user, client_id)
     doc = await get_client_document_for_org(db, current_user.organization_id, client_id, document_id)
+    await require_client_id_access(db, current_user, client_id)
     path = resolve_stored_file(doc.file_path, STORAGE_ROOT)
-    return FileResponse(path=str(path), filename=doc.file_name, media_type=doc.file_type or "application/octet-stream")
+    return FileResponse(path=str(path), filename=doc.file_name, media_type=resolved_media_type(doc.file_name, doc.file_type))
 
 
 @router.get("/{client_id}/id-documents/{document_id}/view")
@@ -765,13 +797,13 @@ async def view_client_id_document(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(role_guard(ALLOWED_STAFF)),
 ):
-    await require_client_id_access(db, current_user, client_id)
     doc = await get_client_document_for_org(db, current_user.organization_id, client_id, document_id)
+    await require_client_id_access(db, current_user, client_id)
     path = resolve_stored_file(doc.file_path, STORAGE_ROOT)
     return FileResponse(
         path=str(path),
         filename=doc.file_name,
-        media_type=doc.file_type or "application/octet-stream",
+        media_type=resolved_media_type(doc.file_name, doc.file_type),
         content_disposition_type="inline",
     )
 
@@ -785,6 +817,7 @@ async def delete_client_id_document(
     current_user: User = Depends(role_guard(ALLOWED_STAFF)),
 ):
     doc = await get_client_document_for_org(db, current_user.organization_id, client_id, document_id)
+    await require_client_id_access(db, current_user, client_id)
     await log_audit_event(
         db,
         organization_id=current_user.organization_id,

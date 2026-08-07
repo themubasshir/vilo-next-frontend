@@ -403,6 +403,57 @@ def test_partner_can_upload_and_staff_can_download_file_without_exposing_raw_pat
             cleanup(client)
 
 
+def test_precedent_view_serves_exact_file_inline_with_inferred_mime(monkeypatch, tmp_path):
+    stored = tmp_path / "1" / "legacy.pdf"
+    stored.parent.mkdir(parents=True)
+    stored.write_bytes(b"%PDF-exact-precedent")
+    row = _precedent_obj(precedent_id=52, file_path=str(stored), file_name="legacy.pdf", content_text=None)
+    row.file_type = "application/octet-stream"
+    client = build_client("lawyer", PrecedentDBStub(scalar_values=[row]))
+    monkeypatch.setattr(precedents_module, "PRECEDENT_STORAGE_ROOT", tmp_path)
+    try:
+        response = client.get("/api/v1/precedents/52/view")
+        assert response.status_code == 200
+        assert response.content == b"%PDF-exact-precedent"
+        assert response.headers["content-type"].startswith("application/pdf")
+        assert response.headers["content-disposition"].startswith("inline")
+    finally:
+        cleanup(client)
+
+
+def test_precedent_view_missing_file_is_controlled_404(monkeypatch, tmp_path):
+    row = _precedent_obj(
+        precedent_id=53,
+        file_path=str(tmp_path / "1" / "missing.pdf"),
+        file_name="missing.pdf",
+        content_text=None,
+    )
+    client = build_client("partner", PrecedentDBStub(scalar_values=[row]))
+    monkeypatch.setattr(precedents_module, "PRECEDENT_STORAGE_ROOT", tmp_path)
+    try:
+        response = client.get("/api/v1/precedents/53/view")
+        assert response.status_code == 404
+        assert response.json()["detail"] == "Stored file not found"
+    finally:
+        cleanup(client)
+
+
+def test_client_role_cannot_preview_precedent_file():
+    client = build_client("client", PrecedentDBStub())
+    try:
+        assert client.get("/api/v1/precedents/52/view").status_code == 403
+    finally:
+        cleanup(client)
+
+
+def test_cross_org_precedent_file_preview_is_non_disclosing_404():
+    client = build_client("admin", PrecedentDBStub(scalar_values=[None]), org_id=2)
+    try:
+        assert client.get("/api/v1/precedents/52/view").status_code == 404
+    finally:
+        cleanup(client)
+
+
 def test_authorized_staff_can_copy_precedent_to_case(monkeypatch):
     with TemporaryDirectory() as tmpdir:
         source_path = Path(tmpdir) / "source.pdf"

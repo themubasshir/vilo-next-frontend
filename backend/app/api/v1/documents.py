@@ -16,7 +16,8 @@ from app.api.deps import role_guard
 from app.core.config import settings
 from app.db.session import get_db
 from app.models.case import Case
-from app.models.client import Client
+from app.models.client import Client, ClientAssignment
+from app.models.case import CaseAssignment
 from app.models.document import Document
 from app.models.document_version import DocumentVersion
 from app.models.user import User
@@ -30,7 +31,7 @@ from app.schemas.document import (
     OnlyOfficeSessionResponse,
 )
 from app.services.audit import log_audit_event
-from app.services.document_storage import MAX_UPLOAD_BYTES, persist_file, resolve_stored_file, safe_original_name
+from app.services.document_storage import MAX_UPLOAD_BYTES, persist_file, resolve_stored_file, resolved_media_type, safe_original_name
 from app.services.email import build_document_shared_email
 from app.services.jobs import enqueue_email
 from app.services.notifications import create_notification
@@ -97,8 +98,36 @@ async def get_org_document(db: AsyncSession, document_id: int, organization_or_u
         Document.organization_id == organization_id,
     ).options(selectinload(Document.case), selectinload(Document.client), selectinload(Document.uploader))
     if isinstance(organization_or_user, User):
-        query = query.where(or_(Document.case_id.is_(None), accessible_case_condition(organization_or_user)))
+        query = query.where(accessible_document_condition(organization_or_user))
     return await db.scalar(query)
+
+
+def accessible_document_condition(current_user: User):
+    if current_user.role.value in {"partner", "admin", "lawyer"}:
+        return Document.organization_id == current_user.organization_id
+    assigned_client_ids = (
+        select(ClientAssignment.client_id)
+        .join(Client, Client.id == ClientAssignment.client_id)
+        .where(
+            Client.organization_id == current_user.organization_id,
+            ClientAssignment.user_id == current_user.id,
+        )
+    )
+    assigned_case_client_ids = (
+        select(Case.client_id)
+        .join(CaseAssignment, CaseAssignment.case_id == Case.id)
+        .where(
+            Case.organization_id == current_user.organization_id,
+            CaseAssignment.user_id == current_user.id,
+            Case.client_id.is_not(None),
+        )
+    )
+    return or_(
+        and_(Document.case_id.is_not(None), accessible_case_condition(current_user)),
+        and_(Document.case_id.is_(None), Document.client_id.is_(None)),
+        and_(Document.case_id.is_(None), Document.client_id.in_(assigned_client_ids)),
+        and_(Document.case_id.is_(None), Document.client_id.in_(assigned_case_client_ids)),
+    )
 
 
 def is_docx_document(document: Document) -> bool:
@@ -290,10 +319,30 @@ async def validate_case(db: AsyncSession, current_user: User, case_id: int | Non
     return case
 
 
-async def validate_client(db: AsyncSession, organization_id: int, client_id: int | None):
+async def validate_client(db: AsyncSession, current_user: User, client_id: int | None):
     if client_id is None:
         return None
-    client = await db.scalar(select(Client).where(Client.id == client_id, Client.organization_id == organization_id))
+    query = select(Client).where(Client.id == client_id, Client.organization_id == current_user.organization_id)
+    if current_user.role.value not in {"partner", "admin", "lawyer"}:
+        assigned_client_ids = (
+            select(ClientAssignment.client_id)
+            .join(Client, Client.id == ClientAssignment.client_id)
+            .where(
+                Client.organization_id == current_user.organization_id,
+                ClientAssignment.user_id == current_user.id,
+            )
+        )
+        assigned_case_client_ids = (
+            select(Case.client_id)
+            .join(CaseAssignment, CaseAssignment.case_id == Case.id)
+            .where(
+                Case.organization_id == current_user.organization_id,
+                CaseAssignment.user_id == current_user.id,
+                Case.client_id.is_not(None),
+            )
+        )
+        query = query.where(or_(Client.id.in_(assigned_client_ids), Client.id.in_(assigned_case_client_ids)))
+    client = await db.scalar(query)
     if not client:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Client must belong to your organization")
     return client
@@ -316,7 +365,7 @@ async def upload_document(
     if visibility not in VALID_VISIBILITY:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid visibility")
     case = await validate_case(db, current_user, case_id)
-    client = await validate_client(db, current_user.organization_id, client_id)
+    client = await validate_client(db, current_user, client_id)
     if case is not None and client is not None and case.client_id != client.id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Case does not belong to client")
     resolved_client_id = client.id if client is not None else (case.client_id if case is not None else None)
@@ -409,7 +458,7 @@ async def list_documents(
 ):
     query = select(Document).outerjoin(Case, Case.id == Document.case_id).where(
         Document.organization_id == current_user.organization_id,
-        or_(Document.case_id.is_(None), accessible_case_condition(current_user)),
+        accessible_document_condition(current_user),
     )
     if case_id is not None:
         query = query.where(Document.case_id == case_id)
@@ -443,7 +492,7 @@ async def query_documents(
         raise HTTPException(status_code=400, detail="Invalid document status")
     filters = [
         Document.organization_id == current_user.organization_id,
-        or_(Document.case_id.is_(None), accessible_case_condition(current_user)),
+        accessible_document_condition(current_user),
     ]
     if document_id is not None:
         filters.append(Document.id == document_id)
@@ -606,7 +655,7 @@ async def download_document(
     if not doc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
     path = resolve_stored_file(doc.file_path, STORAGE_ROOT)
-    return FileResponse(path=str(path), filename=doc.file_name, media_type=doc.file_type or "application/octet-stream")
+    return FileResponse(path=str(path), filename=doc.file_name, media_type=resolved_media_type(doc.file_name, doc.file_type))
 
 
 @router.get("/{document_id}/view")
@@ -622,7 +671,7 @@ async def view_document(
     return FileResponse(
         path=str(path),
         filename=doc.file_name,
-        media_type=doc.file_type or "application/octet-stream",
+        media_type=resolved_media_type(doc.file_name, doc.file_type),
         content_disposition_type="inline",
     )
 
