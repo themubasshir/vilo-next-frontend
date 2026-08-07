@@ -75,7 +75,7 @@ function isCorporateType(type) {
 
 export default function ClientIntakeModal({
   open, mode = "create", client = null, draftAttachment = null, saving = false, apiError = "",
-  onClose, onSubmit, onSaveDraft, onDiscardDraft, onViewDraftAttachment,
+  showIdUpload = true, onClose, onSubmit, onSaveDraft, onDiscardDraft, onViewDraftAttachment,
 }) {
   const [form, setForm] = useState(initialState);
   const [initialForm, setInitialForm] = useState(initialState);
@@ -159,7 +159,7 @@ export default function ClientIntakeModal({
             <div><label>Preferred Contact Method *</label><select value={form.preferred_contact_method} onChange={(e) => setForm({ ...form, preferred_contact_method: e.target.value })}><option value="email">Email</option><option value="phone">Phone</option><option value="sms">SMS</option><option value="whatsapp">WhatsApp</option></select></div>
           </div>
 
-          <div className="client-upload-block">
+          {showIdUpload ? <div className="client-upload-block">
             <p>Upload ID</p>
             {draftAttachment && !attachmentRemoved ? (
               <div className="client-draft-attachment">
@@ -196,7 +196,7 @@ export default function ClientIntakeModal({
             {idFile ? <p className="vilo-state">Selected replacement: {idFile.name}</p> : null}
             {attachmentRemoved && !idFile ? <p className="vilo-state">The saved attachment will be removed when you save or complete this intake.</p> : null}
             {attachmentError ? <p className="vilo-state vilo-state--error">{attachmentError}</p> : null}
-          </div>
+          </div> : null}
 
           <div>
             <label>Notes</label>

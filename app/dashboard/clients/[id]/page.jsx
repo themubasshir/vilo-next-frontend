@@ -75,6 +75,7 @@ export default function ClientDetailPage() {
   const [idUploadOpen, setIdUploadOpen] = useState(false);
   const [idUploadType, setIdUploadType] = useState("");
   const [idUploadFile, setIdUploadFile] = useState(null);
+  const [canManageClientIds, setCanManageClientIds] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -95,10 +96,11 @@ export default function ClientDetailPage() {
 
       setCases(results[0].status === "fulfilled" ? (results[0].value || []) : []);
       setIdDocuments(results[1].status === "fulfilled" ? (results[1].value || []) : []);
+      setCanManageClientIds(results[1].status === "fulfilled");
       setTasks(results[2].status === "fulfilled" ? (results[2].value || []) : []);
       setTeam(results[3].status === "fulfilled" ? (results[3].value || []).filter((user) => user.role !== "client") : []);
       setInvoices(results[4].status === "fulfilled" ? (results[4].value || []) : []);
-      setDocuments(results[5].status === "fulfilled" ? (results[5].value || []) : []);
+      setDocuments(results[5].status === "fulfilled" ? (results[5].value || []).filter((row) => row.category !== "client_id") : []);
     } catch (err) {
       setError(err.message || "Failed to load client details");
     } finally {
@@ -250,6 +252,18 @@ export default function ClientDetailPage() {
       href: "",
     }));
 
+    const clientIdRows = idDocuments.map((row) => ({
+      id: `client-id-${row.id}`,
+      documentId: row.id,
+      documentCategory: "client_id",
+      title: `${labelize(row.client_id_type || "other").replace("Driver Licence", "Driver's License")} · ${row.file_name || row.title || `Document #${row.id}`}`,
+      priority: "low",
+      filing_date: row.updated_at || row.created_at,
+      status: "active",
+      type: "client_ids",
+      href: "",
+    }));
+
     const notesRows = noteLines.map((line, index) => ({
       id: `note-${index}`,
       title: line,
@@ -260,7 +274,7 @@ export default function ClientDetailPage() {
       href: "",
     }));
 
-    let rows = [...caseRows, ...taskRows, ...documentRows, ...notesRows];
+    let rows = [...caseRows, ...taskRows, ...documentRows, ...clientIdRows, ...notesRows];
 
     if (timelineTab !== "all") rows = rows.filter((row) => row.type === timelineTab);
     if (timelineType !== "all") rows = rows.filter((row) => row.type === timelineType);
@@ -277,7 +291,7 @@ export default function ClientDetailPage() {
     });
 
     return rows.slice(0, 8);
-  }, [client?.created_at, client?.updated_at, documents, noteLines, relatedCases, relatedTasks, timelineOrder, timelineSearch, timelineTab, timelineType]);
+  }, [client?.created_at, client?.updated_at, documents, idDocuments, noteLines, relatedCases, relatedTasks, timelineOrder, timelineSearch, timelineTab, timelineType]);
 
   const filteredIdDocuments = useMemo(() => {
     let rows = [...idDocuments];
@@ -293,7 +307,7 @@ export default function ClientDetailPage() {
       return documentOrder === "oldest" ? left - right : right - left;
     });
 
-    return rows.slice(0, 8);
+    return rows;
   }, [documentOrder, documentSearch, idDocuments]);
 
   async function removeIdDocument(documentId) {
@@ -453,13 +467,79 @@ export default function ClientDetailPage() {
                 ["notes", "Notes"],
                 ["messages", "Messages"],
                 ["documents", "Documents"],
+                ["client_ids", "Client IDs"],
                 ["cases", "Cases"],
                 ["tasks", "Tasks"],
               ].map(([key, label]) => (
-                <button key={key} type="button" className={timelineTab === key ? "case-tab-btn is-active" : "case-tab-btn"} onClick={() => setTimelineTab(key)}>{label}</button>
+                <button key={key} type="button" className={timelineTab === key ? "case-tab-btn is-active" : "case-tab-btn"} onClick={() => { setTimelineTab(key); setTimelineType("all"); }}>{label}</button>
               ))}
             </div>
 
+            {timelineTab === "client_ids" ? (
+              <div className="case-tab-panel" style={{ paddingTop: "0.75rem" }}>
+                <div className="dashboard-card__header">
+                  <div>
+                    <h3>Client Identification</h3>
+                    <p className="vilo-card-copy">{idDocuments.length} {idDocuments.length === 1 ? "ID" : "IDs"} on file</p>
+                  </div>
+                  {canManageClientIds ? (
+                    <button className="vilo-btn vilo-btn--primary vilo-btn--xs" type="button" onClick={() => setIdUploadOpen(true)}>Add ID</button>
+                  ) : null}
+                </div>
+
+                {canManageClientIds ? (
+                  <>
+                    <div className="clients-toolbar-row client-detail-toolbar-row">
+                      <input className="case-search-input" placeholder="Search IDs" value={documentDraft} onChange={(e) => setDocumentDraft(e.target.value)} />
+                      <button className="vilo-btn vilo-btn--primary" type="button" onClick={() => setDocumentSearch(documentDraft)}>Search</button>
+                      <div className="clients-select-wrap clients-select-wrap--full">
+                        <select value={documentOrder} onChange={(e) => setDocumentOrder(e.target.value)}>
+                          <option value="newest">Last Modified</option>
+                          <option value="oldest">Oldest First</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    {filteredIdDocuments.length ? (
+                      <div className="vilo-table-wrap case-table-wrap">
+                        <table className="team-table">
+                          <thead><tr><th>ID Type</th><th>Filename</th><th>Size</th><th>Last Modified</th><th>Actions</th></tr></thead>
+                          <tbody>
+                            {filteredIdDocuments.map((row) => (
+                              <tr key={row.id}>
+                                <td>{labelize(row.client_id_type || "other").replace("Driver Licence", "Driver's License")}</td>
+                                <td>{row.file_name || row.title || `Document #${row.id}`}</td>
+                                <td>{row.file_size ? `${Math.ceil(row.file_size / 1024)} KB` : "-"}</td>
+                                <td>{formatDate(row.updated_at || row.created_at)}</td>
+                                <td>
+                                  <div className="vilo-table-actions">
+                                    <button className="vilo-btn vilo-btn--secondary vilo-btn--xs" type="button" onClick={() => openDocumentPreview(row)}>View</button>
+                                    <button className="vilo-btn vilo-btn--ghost vilo-btn--xs" type="button" onClick={() => apiDownload(`/api/v1/clients/${id}/id-documents/${row.id}/download`).catch((err) => setError(err.message || "Download failed"))}>Download</button>
+                                    <button className="vilo-btn vilo-btn--ghost vilo-btn--xs" type="button" onClick={() => setReplaceTarget(row)}>Edit / Replace</button>
+                                    <button className="vilo-btn vilo-btn--ghost vilo-btn--xs" type="button" onClick={() => openVersionHistory(row)}>Versions</button>
+                                    <button className="vilo-btn vilo-btn--danger vilo-btn--xs" type="button" onClick={() => setDeleteDocumentId(row.id)}>Delete</button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : idDocuments.length === 0 ? (
+                      <div className="vilo-state-block">
+                        <p className="vilo-state">No identification documents have been uploaded for this client.</p>
+                        <button className="vilo-btn vilo-btn--primary vilo-btn--xs" type="button" onClick={() => setIdUploadOpen(true)}>Add ID</button>
+                      </div>
+                    ) : (
+                      <div className="vilo-state-block"><p className="vilo-state">No identification documents matched this search.</p></div>
+                    )}
+                  </>
+                ) : (
+                  <div className="vilo-state-block"><p className="vilo-state">Client identification documents are unavailable for your account.</p></div>
+                )}
+              </div>
+            ) : (
+              <>
             <div className="clients-toolbar-row client-detail-toolbar-row">
               <input className="case-search-input" placeholder="Search" value={timelineDraft} onChange={(e) => setTimelineDraft(e.target.value)} />
               <button className="vilo-btn vilo-btn--primary" type="button" onClick={() => setTimelineSearch(timelineDraft)}>Search</button>
@@ -469,6 +549,7 @@ export default function ClientDetailPage() {
                   <option value="cases">Cases</option>
                   <option value="tasks">Tasks</option>
                   <option value="documents">Documents</option>
+                  <option value="client_ids">Client IDs</option>
                   <option value="messages">Messages</option>
                   <option value="notes">Notes</option>
                 </select>
@@ -508,6 +589,8 @@ export default function ClientDetailPage() {
               )}
               <Link href="/dashboard/cases" className="client-view-all-link">View All Cases →</Link>
             </div>
+              </>
+            )}
           </article>
 
           <article className="dashboard-card client-billing-card">
@@ -609,53 +692,6 @@ export default function ClientDetailPage() {
             )}
           </article>
 
-          <article className="dashboard-card clients-list-card">
-            <div className="dashboard-card__header">
-              <h2>Client IDs / Identification</h2>
-              <button className="vilo-btn vilo-btn--primary vilo-btn--xs" type="button" onClick={() => setIdUploadOpen(true)}>Add ID</button>
-            </div>
-            <div className="clients-toolbar-row client-detail-toolbar-row">
-              <input className="case-search-input" placeholder="Search" value={documentDraft} onChange={(e) => setDocumentDraft(e.target.value)} />
-              <button className="vilo-btn vilo-btn--primary" type="button" onClick={() => setDocumentSearch(documentDraft)}>Search</button>
-              <div className="clients-select-wrap clients-select-wrap--full">
-                <select value={documentOrder} onChange={(e) => setDocumentOrder(e.target.value)}>
-                  <option value="newest">Last Modified</option>
-                  <option value="oldest">Oldest First</option>
-                </select>
-              </div>
-            </div>
-
-            <div className="case-tab-panel" style={{ paddingTop: "0.5rem" }}>
-              {filteredIdDocuments.length ? (
-                <div className="vilo-table-wrap case-table-wrap">
-                  <table className="team-table">
-                    <thead><tr><th>ID Type</th><th>Filename</th><th>Size</th><th>Last Modified</th><th>Actions</th></tr></thead>
-                    <tbody>
-                      {filteredIdDocuments.map((row) => (
-                        <tr key={row.id}>
-                          <td>{labelize(row.client_id_type || "other").replace("Driver Licence", "Driver's License")}</td>
-                          <td>{row.file_name || row.title || `Document #${row.id}`}</td>
-                          <td>{row.file_size ? `${Math.ceil(row.file_size / 1024)} KB` : "-"}</td>
-                          <td>{formatDate(row.created_at)}</td>
-                          <td>
-                            <div className="vilo-table-actions">
-                              <button className="vilo-btn vilo-btn--secondary vilo-btn--xs" type="button" onClick={() => openDocumentPreview(row)}>View</button>
-                              <button className="vilo-btn vilo-btn--ghost vilo-btn--xs" type="button" onClick={() => apiDownload(`/api/v1/clients/${id}/id-documents/${row.id}/download`)}>Download</button>
-                              <button className="vilo-btn vilo-btn--ghost vilo-btn--xs" type="button" onClick={() => setReplaceTarget(row)}>Edit / Replace</button>
-                              <button className="vilo-btn vilo-btn--ghost vilo-btn--xs" type="button" onClick={() => openVersionHistory(row)}>Versions</button>
-                              <button className="vilo-btn vilo-btn--danger vilo-btn--xs" type="button" onClick={() => setDeleteDocumentId(row.id)}>Delete</button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <div className="vilo-state-block"><p className="vilo-state">No ID documents found for this client.</p></div>
-              )}
-            </div>
-          </article>
         </div>
 
         <aside className="client-detail-right">
@@ -733,6 +769,7 @@ export default function ClientDetailPage() {
         client={client}
         saving={saving}
         apiError={error}
+        showIdUpload={false}
         onClose={() => setEditOpen(false)}
         onSubmit={handleEdit}
       />
