@@ -52,7 +52,7 @@ export function BillingOverview({ series = [] }) {
       </div>
 
       <div className="billing-card__body">
-        <div className="billing-chart">
+        <div className="billing-chart" style={{ "--billing-axis-width": `${Math.max(3.5, Math.min(7, String(safeMax).length * 0.62 + 1.25))}rem` }}>
           <div className="billing-chart__axis">
             {billingAxisLabels.map((label) => (
               <span key={label}>{label}</span>

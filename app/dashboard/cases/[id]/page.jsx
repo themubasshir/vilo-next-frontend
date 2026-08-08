@@ -449,14 +449,14 @@ export default function CaseDetailPage() {
           </article>
 
           <article className="dashboard-card client-billing-card">
-            <div className="dashboard-card__header">
+            <div className="dashboard-card__header dashboard-card__header--action matter-invoices-header">
               <h2>Matter Invoices</h2>
-              <div className="vilo-table-actions">
+              <div className="vilo-table-actions matter-invoices-actions">
                 <Link href={`/dashboard/invoices?create=1&case_id=${id}`} className="vilo-btn vilo-btn--primary vilo-btn--xs">Create Invoice</Link>
                 <Link href="/dashboard/trust" className="vilo-btn vilo-btn--secondary vilo-btn--xs">Apply Trust Funds</Link>
               </div>
             </div>
-            <div className="client-billing-summary">
+            <div className="client-billing-summary matter-invoices-summary">
               <div className="client-billing-metric">
                 <span>Invoices</span>
                 <strong>{invoices.length}</strong>

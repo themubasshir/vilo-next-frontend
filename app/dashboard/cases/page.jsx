@@ -375,24 +375,24 @@ function CasesPageContent() {
 
         {!loading && !error && cases.length > 0 ? (
           <div className={`vilo-table-wrap case-table-wrap${menuOpenId ? " case-table-wrap--menu-visible" : ""}`}>
-            <table className="team-table">
+            <table className="team-table case-list-table">
               <thead>
                 <tr>
-                  <th>Title</th>
-                  <th>Status</th>
-                  <th>Priority</th>
+                  <th className="case-title-cell">Title</th>
+                  <th className="case-badge-cell">Status</th>
+                  <th className="case-badge-cell">Priority</th>
                   <th>Client</th>
-                  <th className="w-24 text-right">Action</th>
+                  <th className="case-action-cell">Action</th>
                 </tr>
               </thead>
               <tbody>
                 {cases.map((c) => (
                   <tr key={c.id} className="cases-row-link" onClick={() => { if (menuOpenId !== c.id) router.push(`/dashboard/cases/${c.id}`); }}>
-                    <td><Link href={`/dashboard/cases/${c.id}`} className="cases-title-link">{c.title || "Untitled draft"}</Link></td>
-                    <td><span className={`vilo-badge vilo-badge--${c.status}`}>{c.status}</span></td>
-                    <td><span className={`vilo-badge vilo-badge--priority-${c.priority}`}>{c.priority}</span></td>
+                    <td className="case-title-cell"><Link href={`/dashboard/cases/${c.id}`} className="cases-title-link">{c.title || "Untitled draft"}</Link></td>
+                    <td className="case-badge-cell"><span className={`vilo-badge vilo-badge--${c.status}`}>{c.status}</span></td>
+                    <td className="case-badge-cell"><span className={`vilo-badge vilo-badge--priority-${c.priority}`}>{c.priority}</span></td>
                     <td>{c.client_name || `#${c.client_id}`}</td>
-                    <td className="w-24 align-middle" onClick={(e) => e.stopPropagation()}>
+                    <td className="case-action-cell" onClick={(e) => e.stopPropagation()}>
                       <div className="vilo-table-actions case-row-actions">
                         <button
                           type="button"

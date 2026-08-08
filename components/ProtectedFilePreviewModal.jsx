@@ -17,29 +17,32 @@ const CLOSED_PREVIEW = {
 export function useProtectedFilePreview() {
   const [preview, setPreview] = useState(CLOSED_PREVIEW);
   const objectUrlRef = useRef("");
-  const requestRef = useRef({ id: 0, controller: null });
+  const loadedPathRef = useRef("");
+  const requestRef = useRef({ id: 0, controller: null, path: "" });
 
   const releaseObjectUrl = useCallback(() => {
     if (objectUrlRef.current) {
       window.URL.revokeObjectURL(objectUrlRef.current);
       objectUrlRef.current = "";
     }
+    loadedPathRef.current = "";
   }, []);
 
   const closePreview = useCallback(() => {
     requestRef.current.controller?.abort();
-    requestRef.current = { id: requestRef.current.id + 1, controller: null };
+    requestRef.current = { id: requestRef.current.id + 1, controller: null, path: "" };
     releaseObjectUrl();
     setPreview(CLOSED_PREVIEW);
   }, [releaseObjectUrl]);
 
   const openPreview = useCallback(async ({ path, downloadPath = "", filename = "File preview" }) => {
+    if (requestRef.current.path === path && (requestRef.current.controller || loadedPathRef.current === path)) return;
     requestRef.current.controller?.abort();
     releaseObjectUrl();
 
     const controller = new AbortController();
     const requestId = requestRef.current.id + 1;
-    requestRef.current = { id: requestId, controller };
+    requestRef.current = { id: requestId, controller, path };
     setPreview({
       ...CLOSED_PREVIEW,
       open: true,
@@ -56,6 +59,8 @@ export function useProtectedFilePreview() {
         ? ""
         : window.URL.createObjectURL(result.blob);
       objectUrlRef.current = objectUrl;
+      loadedPathRef.current = path;
+      requestRef.current = { id: requestId, controller: null, path };
       setPreview({
         open: true,
         loading: false,
@@ -68,6 +73,7 @@ export function useProtectedFilePreview() {
       });
     } catch (error) {
       if (error?.name === "AbortError" || requestRef.current.id !== requestId) return;
+      requestRef.current = { id: requestId, controller: null, path: "" };
       setPreview({
         ...CLOSED_PREVIEW,
         open: true,
@@ -90,6 +96,7 @@ export default function ProtectedFilePreviewModal({ preview, onClose }) {
   const [downloadError, setDownloadError] = useState("");
   const [downloading, setDownloading] = useState(false);
   const [renderError, setRenderError] = useState(false);
+  const [openError, setOpenError] = useState("");
 
   useEffect(() => {
     if (!preview.open) return undefined;
@@ -108,6 +115,7 @@ export default function ProtectedFilePreviewModal({ preview, onClose }) {
   useEffect(() => {
     setDownloadError("");
     setRenderError(false);
+    setOpenError("");
   }, [preview.filename, preview.objectUrl, preview.open]);
 
   if (!preview.open) return null;
@@ -125,6 +133,18 @@ export default function ProtectedFilePreviewModal({ preview, onClose }) {
     }
   }
 
+  function openInNewTab() {
+    if (!preview.objectUrl) return;
+    setOpenError("");
+    const opened = window.open("", "_blank");
+    if (opened) {
+      opened.opener = null;
+      opened.location.href = preview.objectUrl;
+    } else {
+      setOpenError("Your browser blocked the new tab. Allow pop-ups for VILO or download the file instead.");
+    }
+  }
+
   return (
     <div className="vilo-modal-overlay protected-file-preview-overlay" onClick={onClose}>
       <section
@@ -137,6 +157,11 @@ export default function ProtectedFilePreviewModal({ preview, onClose }) {
         <div className="vilo-modal__header protected-file-preview-header">
           <h3 id="protected-file-preview-title" title={preview.filename}>{preview.filename || "File preview"}</h3>
           <div className="protected-file-preview-actions">
+            {preview.objectUrl ? (
+              <button type="button" className="vilo-btn vilo-btn--secondary vilo-btn--xs" onClick={openInNewTab}>
+                Open in New Tab
+              </button>
+            ) : null}
             {preview.downloadPath ? (
               <button type="button" className="vilo-btn vilo-btn--secondary vilo-btn--xs" onClick={download} disabled={downloading}>
                 {downloading ? "Downloading..." : "Download"}
@@ -147,20 +172,29 @@ export default function ProtectedFilePreviewModal({ preview, onClose }) {
         </div>
 
         <div className="vilo-modal__body protected-file-preview-body">
-          {preview.loading ? <p className="vilo-state vilo-state--loading">Loading preview…</p> : null}
+          {preview.loading ? (
+            <div className="protected-file-preview-loading" role="status" aria-live="polite">
+              <span className="protected-file-preview-spinner" aria-hidden="true" />
+              <p>Loading preview…</p>
+            </div>
+          ) : null}
 
           {!preview.loading && preview.error ? (
             <div className="protected-file-preview-message">
-              <p className="vilo-state vilo-state--error">Unable to preview this file.</p>
+              <p className="vilo-state vilo-state--error">Preview could not be loaded.</p>
               <p>{preview.error}</p>
+              {preview.downloadPath ? <button type="button" className="vilo-btn vilo-btn--primary" onClick={download} disabled={downloading}>{downloading ? "Downloading..." : "Download"}</button> : null}
             </div>
           ) : null}
 
           {!preview.loading && !preview.error && !renderError && preview.previewType === "pdf" ? (
             <object className="protected-file-preview-pdf" data={preview.objectUrl} type="application/pdf" aria-label={`Preview of ${preview.filename}`} onError={() => setRenderError(true)}>
               <div className="protected-file-preview-message">
-                <p>Preview unavailable. Download the file instead.</p>
-                {preview.downloadPath ? <button type="button" className="vilo-btn vilo-btn--primary" onClick={download}>Download</button> : null}
+                <p>Preview could not be displayed in this browser. Open the file in a new tab or download it.</p>
+                <div className="protected-file-preview-message__actions">
+                  <button type="button" className="vilo-btn vilo-btn--secondary" onClick={openInNewTab}>Open in New Tab</button>
+                  {preview.downloadPath ? <button type="button" className="vilo-btn vilo-btn--primary" onClick={download}>Download</button> : null}
+                </div>
               </div>
             </object>
           ) : null}
@@ -173,11 +207,15 @@ export default function ProtectedFilePreviewModal({ preview, onClose }) {
 
           {!preview.loading && !preview.error && (renderError || preview.previewType === "unsupported") ? (
             <div className="protected-file-preview-message">
-              <p>Preview unavailable. Download the file instead.</p>
-              {preview.downloadPath ? <button type="button" className="vilo-btn vilo-btn--primary" onClick={download}>Download</button> : null}
+              <p>{renderError ? "Preview could not be displayed in this browser. Open the file in a new tab or download it." : "This file type cannot be previewed in VILO. Download it to open it in a compatible application."}</p>
+              <div className="protected-file-preview-message__actions">
+                {renderError && preview.objectUrl ? <button type="button" className="vilo-btn vilo-btn--secondary" onClick={openInNewTab}>Open in New Tab</button> : null}
+                {preview.downloadPath ? <button type="button" className="vilo-btn vilo-btn--primary" onClick={download}>Download</button> : null}
+              </div>
             </div>
           ) : null}
 
+          {openError ? <p className="vilo-state vilo-state--error protected-file-preview-download-error">{openError}</p> : null}
           {downloadError ? <p className="vilo-state vilo-state--error protected-file-preview-download-error">{downloadError}</p> : null}
         </div>
       </section>

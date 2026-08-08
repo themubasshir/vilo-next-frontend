@@ -480,7 +480,7 @@ export default function ClientDetailPage() {
 
             {timelineTab === "client_ids" ? (
               <div className="case-tab-panel" style={{ paddingTop: "0.75rem" }}>
-                <div className="dashboard-card__header">
+                <div className="dashboard-card__header dashboard-card__header--action client-ids-header">
                   <div>
                     <h3>Client Identification</h3>
                     <p className="vilo-card-copy">{idDocuments.length} {idDocuments.length === 1 ? "ID" : "IDs"} on file</p>
@@ -492,7 +492,7 @@ export default function ClientDetailPage() {
 
                 {canManageClientIds ? (
                   <>
-                    <div className="clients-toolbar-row client-detail-toolbar-row">
+                    <div className="clients-toolbar-row client-detail-toolbar-row client-ids-toolbar">
                       <input className="case-search-input" placeholder="Search IDs" value={documentDraft} onChange={(e) => setDocumentDraft(e.target.value)} />
                       <button className="vilo-btn vilo-btn--primary" type="button" onClick={() => setDocumentSearch(documentDraft)}>Search</button>
                       <div className="clients-select-wrap clients-select-wrap--full">
@@ -504,8 +504,8 @@ export default function ClientDetailPage() {
                     </div>
 
                     {filteredIdDocuments.length ? (
-                      <div className="vilo-table-wrap case-table-wrap">
-                        <table className="team-table">
+                      <div className="vilo-table-wrap case-table-wrap client-id-table-wrap">
+                        <table className="team-table client-id-table">
                           <thead><tr><th>ID Type</th><th>Filename</th><th>Size</th><th>Last Modified</th><th>Actions</th></tr></thead>
                           <tbody>
                             {filteredIdDocuments.map((row) => (
@@ -514,8 +514,8 @@ export default function ClientDetailPage() {
                                 <td>{row.file_name || row.title || `Document #${row.id}`}</td>
                                 <td>{row.file_size ? `${Math.ceil(row.file_size / 1024)} KB` : "-"}</td>
                                 <td>{formatDate(row.updated_at || row.created_at)}</td>
-                                <td>
-                                  <div className="vilo-table-actions">
+                                <td className="client-id-actions-cell">
+                                  <div className="vilo-table-actions client-id-actions">
                                     <button className="vilo-btn vilo-btn--secondary vilo-btn--xs" type="button" onClick={() => openDocumentPreview(row)}>View</button>
                                     <button className="vilo-btn vilo-btn--ghost vilo-btn--xs" type="button" onClick={() => apiDownload(`/api/v1/clients/${id}/id-documents/${row.id}/download`).catch((err) => setError(err.message || "Download failed"))}>Download</button>
                                     <button className="vilo-btn vilo-btn--ghost vilo-btn--xs" type="button" onClick={() => setReplaceTarget(row)}>Edit / Replace</button>
@@ -597,7 +597,7 @@ export default function ClientDetailPage() {
           </article>
 
           <article className="dashboard-card client-billing-card">
-            <div className="dashboard-card__header">
+            <div className="dashboard-card__header dashboard-card__header--action client-section-header">
               <h2>Invoices &amp; Billing</h2>
               <Link href={`/dashboard/invoices?create=1&client_id=${id}`} className="vilo-btn vilo-btn--primary vilo-btn--xs">
                 Create Invoice
@@ -637,7 +637,7 @@ export default function ClientDetailPage() {
           </article>
 
           <article className="dashboard-card clients-list-card">
-            <div className="dashboard-card__header">
+            <div className="dashboard-card__header dashboard-card__header--action client-section-header">
               <h2>Tasks</h2>
               <Link href={`/dashboard/tasks?create=1&client_id=${id}`} className="vilo-btn vilo-btn--primary vilo-btn--xs">
                 Add Task
@@ -678,7 +678,7 @@ export default function ClientDetailPage() {
           </article>
 
           <article ref={notesSectionRef} className="dashboard-card">
-            <div className="dashboard-card__header">
+            <div className="dashboard-card__header dashboard-card__header--action client-section-header">
               <h2>Notes</h2>
               <button type="button" className="vilo-btn vilo-btn--secondary vilo-btn--xs" onClick={openNoteModal}>
                 Add Note
@@ -718,12 +718,17 @@ export default function ClientDetailPage() {
           <article className="dashboard-card">
             <div className="dashboard-card__header"><h2>Team Members</h2></div>
             <div className="client-team-panel">
-              <select value="" onChange={(e) => { if (!e.target.value) return; toggleTeamMember(Number(e.target.value)); }}>
-                <option value="">Assign team member</option>
-                {availableTeam.map((member) => (
-                  <option key={member.id} value={member.id}>{member.name} ({member.role})</option>
-                ))}
-              </select>
+              <div className="client-team-controls">
+                <select value="" onChange={(e) => { if (!e.target.value) return; toggleTeamMember(Number(e.target.value)); }}>
+                  <option value="">Assign team member</option>
+                  {availableTeam.map((member) => (
+                    <option key={member.id} value={member.id}>{member.name} ({member.role})</option>
+                  ))}
+                </select>
+                <button type="button" className="vilo-btn vilo-btn--primary vilo-btn--xs" onClick={saveAssignedTeam} disabled={saving}>
+                  {saving ? "Saving..." : "Save Team"}
+                </button>
+              </div>
 
               <div className="case-assigned-list">
                 {assignedUsers.length ? assignedUsers.map((member) => (
@@ -747,9 +752,6 @@ export default function ClientDetailPage() {
                 </div>
               ) : null}
 
-              <button type="button" className="vilo-btn vilo-btn--primary vilo-btn--xs" onClick={saveAssignedTeam} disabled={saving}>
-                {saving ? "Saving..." : "Save Team"}
-              </button>
             </div>
           </article>
 
