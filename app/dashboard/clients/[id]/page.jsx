@@ -479,7 +479,7 @@ export default function ClientDetailPage() {
             </div>
 
             {timelineTab === "client_ids" ? (
-              <div className="case-tab-panel" style={{ paddingTop: "0.75rem" }}>
+              <div className="case-tab-panel client-ids-panel" style={{ paddingTop: "0.75rem" }}>
                 <div className="dashboard-card__header dashboard-card__header--action client-ids-header">
                   <div>
                     <h3>Client Identification</h3>

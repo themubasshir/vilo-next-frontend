@@ -2435,8 +2435,8 @@ button {
 
 .billing-chart {
   display: grid;
-  grid-template-columns: var(--billing-axis-width, 3.5rem) minmax(0, 1fr);
-  gap: 0.85rem;
+  grid-template-columns: var(--billing-axis-width, 2.5rem) minmax(0, 1fr);
+  gap: 0.5rem;
 }
 
 .billing-chart__axis {
@@ -2444,7 +2444,7 @@ button {
   align-items: stretch;
   justify-items: end;
   min-width: 0;
-  padding: 0.2rem 0.15rem 0.35rem 0;
+  padding: 0.2rem 0.1rem 0.35rem 0;
 }
 
 .billing-chart__axis span {
@@ -3053,7 +3053,7 @@ button {
   .billing-chart {
     width: 100%;
     display: grid;
-    grid-template-columns: var(--billing-axis-width, 3.5rem) minmax(0, 1fr);
+    grid-template-columns: var(--billing-axis-width, 2.5rem) minmax(0, 1fr);
     overflow: visible;
     margin-bottom: 1rem;
   }
@@ -4836,6 +4836,9 @@ button {
 
 .client-detail-grid {
   display: grid;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
   grid-template-columns: minmax(0, 2fr) minmax(300px, 1fr);
   gap: 1rem;
 }
@@ -4843,8 +4846,16 @@ button {
 .client-detail-left,
 .client-detail-right {
   display: grid;
+  min-width: 0;
   gap: 1rem;
   align-content: start;
+}
+
+.client-detail-left > .dashboard-card,
+.client-ids-panel {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .client-detail-right .dashboard-card {
@@ -4877,16 +4888,29 @@ button {
 }
 
 .client-ids-toolbar {
-  grid-template-columns: minmax(220px, 1fr) auto minmax(150px, auto);
+  display: flex;
+  flex-wrap: wrap;
   gap: 0.75rem;
   align-items: center;
   margin: 0 1.35rem 1rem;
   padding: 0;
+  max-width: 100%;
+}
+
+.client-ids-toolbar .case-search-input {
+  flex: 1 1 220px;
+  width: auto;
+  min-width: 0;
+}
+
+.client-ids-toolbar > .vilo-btn {
+  flex: 0 0 auto;
 }
 
 .client-ids-toolbar .clients-select-wrap--full {
-  grid-column: auto;
-  justify-self: stretch;
+  flex: 0 1 180px;
+  min-width: 150px;
+  max-width: 100%;
 }
 
 .client-ids-toolbar .clients-select-wrap--full select {
@@ -4895,7 +4919,12 @@ button {
 }
 
 .client-id-table-wrap {
+  width: auto;
+  min-width: 0;
+  max-width: 100%;
   margin: 0 1.35rem 1.25rem;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
 }
 
 .client-id-table {
@@ -8565,6 +8594,12 @@ button {
   }
 }
 
+@media (max-width: 1100px) {
+  .client-detail-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 @media (max-width: 840px) {
   .dashboard-card__header--action {
     flex-direction: column;
@@ -8579,11 +8614,12 @@ button {
   }
 
   .client-ids-toolbar {
-    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: stretch;
   }
 
   .client-ids-toolbar .clients-select-wrap--full {
-    grid-column: 1 / -1;
+    flex-basis: 100%;
+    min-width: 0;
   }
 
   .matter-invoices-actions {
