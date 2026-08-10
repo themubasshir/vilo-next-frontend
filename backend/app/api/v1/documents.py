@@ -2,7 +2,7 @@ import hashlib
 from datetime import date, datetime, timedelta, timezone
 from io import BytesIO
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import httpx
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Request, UploadFile, status
@@ -554,6 +554,7 @@ async def get_document(
 async def create_onlyoffice_session(
     document_id: int,
     request: Request,
+    mode: Literal["edit", "view"] = "edit",
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(role_guard(ALLOWED_STAFF)),
 ):
@@ -577,14 +578,8 @@ async def create_onlyoffice_session(
         version=doc.version,
         purpose="onlyoffice_file",
     )
-    callback_token = build_internal_document_token(
-        document_id=doc.id,
-        organization_id=doc.organization_id,
-        version=doc.version,
-        purpose="onlyoffice_callback",
-    )
     file_url = f"{backend_base_url}/api/v1/documents/{doc.id}/onlyoffice/file?token={file_token}"
-    callback_url = f"{backend_base_url}/api/v1/documents/{doc.id}/onlyoffice/callback?token={callback_token}"
+    is_view_mode = mode == "view"
 
     config = {
         "documentType": "word",
@@ -593,34 +588,58 @@ async def create_onlyoffice_session(
             "title": doc.file_name,
             "url": file_url,
             "key": build_onlyoffice_document_key(doc),
-            "permissions": {
-                "edit": True,
-                "download": True,
-            },
+            "permissions": (
+                {
+                    "edit": False,
+                    "download": True,
+                    "comment": False,
+                    "review": False,
+                    "fillForms": False,
+                    "modifyContentControl": False,
+                }
+                if is_view_mode
+                else {"edit": True, "download": True}
+            ),
         },
         "editorConfig": {
-            "callbackUrl": callback_url,
-            "mode": "edit",
+            "mode": mode,
             "user": {
                 "id": str(current_user.id),
                 "name": current_user.name or current_user.email or f"User {current_user.id}",
             },
-            "customization": {
-                "autosave": True,
-            },
+            "customization": (
+                {"autosave": False, "forcesave": False}
+                if is_view_mode
+                else {"autosave": True}
+            ),
         },
     }
+
+    if not is_view_mode:
+        callback_token = build_internal_document_token(
+            document_id=doc.id,
+            organization_id=doc.organization_id,
+            version=doc.version,
+            purpose="onlyoffice_callback",
+        )
+        config["editorConfig"]["callbackUrl"] = (
+            f"{backend_base_url}/api/v1/documents/{doc.id}/onlyoffice/callback?token={callback_token}"
+        )
 
     return OnlyOfficeSessionResponse(
         document_id=doc.id,
         version=doc.version,
         document_server_url=normalize_base_url(document_server_url),
         editor_config=sign_onlyoffice_config(config),
-        warning=DOCX_WARNING,
-        notes=[
-            "Edits saved from ONLYOFFICE create a new document version.",
-            "The existing basic editor remains available as a fallback for DOCX text edits.",
-        ],
+        warning=None if is_view_mode else DOCX_WARNING,
+        notes=(
+            ["This session is read-only and cannot save document changes."]
+            if is_view_mode
+            else [
+                "Edits saved from ONLYOFFICE create a new document version.",
+                "The existing basic editor remains available as a fallback for DOCX text edits.",
+            ]
+        ),
     )
 
 

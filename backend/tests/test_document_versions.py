@@ -34,6 +34,7 @@ class DocsVersionDBStub:
         self.scalar_values = list(scalar_values or [])
         self.scalars_values = list(scalars_values or [])
         self.added = []
+        self.commit_count = 0
 
     async def scalar(self, query, *args, **kwargs):
         assert "organization_id" in str(query)
@@ -61,6 +62,7 @@ class DocsVersionDBStub:
         return None
 
     async def commit(self):
+        self.commit_count += 1
         return None
 
     async def refresh(self, obj):
@@ -302,9 +304,75 @@ def test_onlyoffice_session_returns_editor_config_without_raw_path(monkeypatch):
         assert body["document_id"] == 51
         assert body["document_server_url"] == "https://docs.example.com"
         assert body["editor_config"]["document"]["fileType"] == "docx"
+        assert body["editor_config"]["document"]["permissions"]["edit"] is True
         assert body["editor_config"]["editorConfig"]["mode"] == "edit"
+        assert "callbackUrl" in body["editor_config"]["editorConfig"]
         assert "/private/storage" not in str(body)
         assert "file_path" not in str(body)
+    finally:
+        cleanup(client)
+
+
+def test_onlyoffice_view_session_is_read_only_and_does_not_mutate_document(monkeypatch):
+    monkeypatch.setattr(documents_module.settings, "onlyoffice_document_server_url", "https://docs.example.com/")
+    monkeypatch.setattr(documents_module.settings, "public_backend_url", "https://api.example.com")
+    monkeypatch.setattr(documents_module.settings, "onlyoffice_jwt_secret", None)
+    doc = _docx_doc(path="/private/storage/org1/view-only.docx")
+    original_version = doc.version
+    original_updated_at = doc.updated_at
+    db = DocsVersionDBStub(scalar_values=[doc])
+    client = build_client("paralegal", db)
+    try:
+        res = client.post("/api/v1/documents/51/onlyoffice/session?mode=view")
+        assert res.status_code == 200
+        body = res.json()
+        assert body["document_id"] == doc.id
+        assert body["version"] == original_version
+        assert body["editor_config"]["document"]["title"] == doc.file_name
+        permissions = body["editor_config"]["document"]["permissions"]
+        assert permissions == {
+            "edit": False,
+            "download": True,
+            "comment": False,
+            "review": False,
+            "fillForms": False,
+            "modifyContentControl": False,
+        }
+        editor_config = body["editor_config"]["editorConfig"]
+        assert editor_config["mode"] == "view"
+        assert editor_config["customization"]["autosave"] is False
+        assert editor_config["customization"]["forcesave"] is False
+        assert "callbackUrl" not in editor_config
+        assert body["warning"] is None
+        assert doc.version == original_version
+        assert doc.updated_at == original_updated_at
+        assert db.added == []
+        assert db.commit_count == 0
+        assert "/private/storage" not in str(body)
+    finally:
+        cleanup(client)
+
+
+def test_onlyoffice_view_session_remains_org_scoped(monkeypatch):
+    monkeypatch.setattr(documents_module.settings, "onlyoffice_document_server_url", "https://docs.example.com")
+    db = DocsVersionDBStub(scalar_values=[None])
+    client = build_client("lawyer", db, org_id=2)
+    try:
+        res = client.post("/api/v1/documents/51/onlyoffice/session?mode=view")
+        assert res.status_code == 404
+    finally:
+        cleanup(client)
+
+
+def test_onlyoffice_view_session_blocks_non_docx(monkeypatch):
+    monkeypatch.setattr(documents_module.settings, "onlyoffice_document_server_url", "https://docs.example.com")
+    db = DocsVersionDBStub(scalar_values=[_doc_obj()])
+    client = build_client("admin", db)
+    try:
+        res = client.post("/api/v1/documents/51/onlyoffice/session?mode=view")
+        assert res.status_code == 400
+        assert "DOCX only" in res.json()["detail"]
+        assert db.commit_count == 0
     finally:
         cleanup(client)
 

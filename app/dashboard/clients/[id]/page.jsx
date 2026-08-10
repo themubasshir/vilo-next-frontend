@@ -6,6 +6,8 @@ import { useParams } from "next/navigation";
 import { apiDownload, apiRequest, apiUpload } from "../../../../lib/api";
 import ClientIntakeModal from "../../../../components/dashboard/ClientIntakeModal";
 import ProtectedFilePreviewModal, { useProtectedFilePreview } from "../../../../components/ProtectedFilePreviewModal";
+import OnlyOfficeDocumentModal from "../../../../components/OnlyOfficeDocumentModal";
+import { getDocumentViewerType } from "../../../../lib/documentViewer";
 
 function formatDate(value) {
   if (!value) return "-";
@@ -77,6 +79,7 @@ export default function ClientDetailPage() {
   const [idUploadType, setIdUploadType] = useState("");
   const [idUploadFile, setIdUploadFile] = useState(null);
   const [canManageClientIds, setCanManageClientIds] = useState(false);
+  const [onlyOfficeTarget, setOnlyOfficeTarget] = useState(null);
   const { preview, openPreview, closePreview } = useProtectedFilePreview();
 
   async function load() {
@@ -248,6 +251,7 @@ export default function ClientDetailPage() {
       documentCategory: row.category,
       title: row.title || row.file_name || `Document #${row.id}`,
       fileName: row.file_name || row.title || `Document #${row.id}`,
+      fileType: row.file_type,
       priority: "low",
       filing_date: row.updated_at || row.created_at,
       status: "active",
@@ -261,6 +265,7 @@ export default function ClientDetailPage() {
       documentCategory: "client_id",
       title: `${labelize(row.client_id_type || "other").replace("Driver Licence", "Driver's License")} · ${row.file_name || row.title || `Document #${row.id}`}`,
       fileName: row.file_name || row.title || `Document #${row.id}`,
+      fileType: row.file_type,
       priority: "low",
       filing_date: row.updated_at || row.created_at,
       status: "active",
@@ -367,22 +372,41 @@ export default function ClientDetailPage() {
 
   function openDocumentPreview(row) {
     setError("");
-    void openPreview({
-      path: `/api/v1/clients/${id}/id-documents/${row.id}/view`,
-      downloadPath: `/api/v1/clients/${id}/id-documents/${row.id}/download`,
+    openClientDocument({
+      id: row.id,
       filename: row.file_name || row.title || `Document #${row.id}`,
+      mediaType: row.file_type,
+      isClientId: true,
+      document: row,
     });
   }
 
   function openTimelineDocument(row) {
     setError("");
-    const path = row.documentCategory === "client_id"
-      ? `/api/v1/clients/${id}/id-documents/${row.documentId}/view`
-      : `/api/v1/documents/${row.documentId}/view`;
-    const downloadPath = row.documentCategory === "client_id"
-      ? `/api/v1/clients/${id}/id-documents/${row.documentId}/download`
-      : `/api/v1/documents/${row.documentId}/download`;
-    void openPreview({ path, downloadPath, filename: row.fileName || row.title });
+    const source = row.documentCategory === "client_id"
+      ? idDocuments.find((document) => Number(document.id) === Number(row.documentId))
+      : documents.find((document) => Number(document.id) === Number(row.documentId));
+    openClientDocument({
+      id: row.documentId,
+      filename: row.fileName || row.title,
+      mediaType: row.fileType,
+      isClientId: row.documentCategory === "client_id",
+      document: source || { id: row.documentId, file_name: row.fileName, title: row.title, file_type: row.fileType },
+    });
+  }
+
+  function openClientDocument({ id: documentId, filename, mediaType, isClientId, document }) {
+    const downloadPath = isClientId
+      ? `/api/v1/clients/${id}/id-documents/${documentId}/download`
+      : `/api/v1/documents/${documentId}/download`;
+    if (getDocumentViewerType({ filename, mediaType }) === "onlyoffice") {
+      setOnlyOfficeTarget({ ...document, id: documentId, file_name: filename, downloadPath });
+      return;
+    }
+    const path = isClientId
+      ? `/api/v1/clients/${id}/id-documents/${documentId}/view`
+      : `/api/v1/documents/${documentId}/view`;
+    void openPreview({ path, downloadPath, filename });
   }
 
   async function uploadIdDocument(event) {
@@ -438,9 +462,16 @@ export default function ClientDetailPage() {
   return (
     <section className="dashboard-page-stack client-detail-page">
       <div className="client-detail-top-row">
-        <div>
+        <div className="client-detail-heading">
           <h1>Client Details</h1>
           <p><Link href="/dashboard/clients">Clients</Link> &gt; Client Info</p>
+          <div className="client-identity-header">
+            <div className="client-avatar">{(client?.name || "C").slice(0, 1).toUpperCase()}</div>
+            <div className="client-identity-main-copy">
+              <h2>{client?.name || "Client"}</h2>
+              <p>CL-{String(client?.id || "").padStart(4, "0")} · {type} · {statusLabel}</p>
+            </div>
+          </div>
         </div>
         <button type="button" className="vilo-btn vilo-btn--secondary" onClick={() => setEditOpen(true)}>
           Edit
@@ -449,16 +480,6 @@ export default function ClientDetailPage() {
 
       {error ? <p className="vilo-state vilo-state--error">{error}</p> : null}
       {success ? <p className="vilo-state">{success}</p> : null}
-
-      <article className="dashboard-card client-identity-card">
-        <div className="client-identity-main">
-          <div className="client-avatar">{(client?.name || "C").slice(0, 1).toUpperCase()}</div>
-          <div>
-            <h2>{client?.name || "Client"}</h2>
-            <p>CL-{String(client?.id || "").padStart(4, "0")} · {type} · {statusLabel}</p>
-          </div>
-        </div>
-      </article>
 
       <div className="client-detail-grid">
         <div className="client-detail-left">
@@ -909,6 +930,14 @@ export default function ClientDetailPage() {
         </div>
       ) : null}
       <ProtectedFilePreviewModal preview={preview} onClose={closePreview} />
+      {onlyOfficeTarget ? (
+        <OnlyOfficeDocumentModal
+          document={onlyOfficeTarget}
+          mode="view"
+          downloadPath={onlyOfficeTarget.downloadPath}
+          onClose={() => setOnlyOfficeTarget(null)}
+        />
+      ) : null}
     </section>
   );
 }

@@ -4,8 +4,11 @@ import sys
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
+from io import BytesIO
 from pathlib import Path
 
+from reportlab.lib.pagesizes import LETTER
+from reportlab.pdfgen import canvas
 from sqlalchemy import delete, select
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
@@ -287,16 +290,32 @@ async def ensure_file(path: Path, content: bytes):
     path.write_bytes(content)
 
 
+def build_demo_pdf(title: str) -> bytes:
+    buffer = BytesIO()
+    pdf = canvas.Canvas(buffer, pagesize=LETTER)
+    pdf.setTitle(title)
+    pdf.setFont("Helvetica-Bold", 16)
+    pdf.drawString(72, 720, title)
+    pdf.setFont("Helvetica", 10)
+    pdf.drawString(72, 698, "VILO demo document")
+    pdf.showPage()
+    pdf.save()
+    return buffer.getvalue()
+
+
 async def upsert_document(db, org_id: int, uploader_id: int, title: str, file_name: str, category: str, case_id: int | None, client_id: int | None, make_file: bool):
     row = await db.scalar(select(Document).where(Document.organization_id == org_id, Document.title == title, Document.category == category))
     file_path = STORAGE_ROOT / str(org_id) / "demo" / file_name
-    if make_file and not file_path.exists():
-        await ensure_file(file_path, b"VILO demo file")
+    file_bytes = build_demo_pdf(title)
+    if make_file:
+        await ensure_file(file_path, file_bytes)
     if row:
         row.case_id = case_id
         row.client_id = client_id
         row.file_name = file_name
         row.file_path = str(file_path)
+        row.file_type = "application/pdf"
+        row.file_size = len(file_bytes)
         row.updated_at = now_utc()
         return row
     row = Document(
@@ -309,7 +328,7 @@ async def upsert_document(db, org_id: int, uploader_id: int, title: str, file_na
         file_name=file_name,
         file_path=str(file_path),
         file_type="application/pdf",
-        file_size=14,
+        file_size=len(file_bytes),
         category=category,
         visibility="internal",
         version=1,
