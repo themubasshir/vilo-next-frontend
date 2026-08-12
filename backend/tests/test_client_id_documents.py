@@ -351,6 +351,30 @@ def test_authorized_document_preview_serves_exact_file_inline(monkeypatch, tmp_p
         cleanup(client)
 
 
+def test_authorized_pdf_preview_returns_valid_bytes_type_and_filename(monkeypatch, tmp_path):
+    pdf_bytes = b"%PDF-1.7\n% VILO preview fixture\n%%EOF\n"
+    stored = tmp_path / "1" / "stored.pdf"
+    stored.parent.mkdir(parents=True)
+    stored.write_bytes(pdf_bytes)
+    doc_row = _doc_obj(path=str(stored))
+    doc_row.file_name = "signed agreement.pdf"
+    doc_row.file_type = "application/octet-stream"
+    db = ClientDocsDBStub(scalar_values=[doc_row])
+    client = build_client("lawyer", db)
+    monkeypatch.setattr(documents_module, "STORAGE_ROOT", tmp_path)
+    try:
+        response = client.get("/api/v1/documents/41/view")
+        assert response.status_code == 200
+        assert response.content == pdf_bytes
+        assert response.content.startswith(b"%PDF-")
+        assert response.headers["content-type"].startswith("application/pdf")
+        disposition = response.headers["content-disposition"]
+        assert disposition.startswith("inline")
+        assert "signed%20agreement.pdf" in disposition
+    finally:
+        cleanup(client)
+
+
 def test_document_preview_missing_file_is_controlled_404(monkeypatch, tmp_path):
     doc_row = _doc_obj(path=str(tmp_path / "1" / "missing.pdf"))
     doc_row.category = "evidence"

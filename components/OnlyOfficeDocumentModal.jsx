@@ -172,9 +172,11 @@ export default function OnlyOfficeDocumentModal({
                 {downloading ? "Downloading..." : "Download"}
               </button>
             ) : null}
-            <button type="button" className="vilo-btn vilo-btn--ghost vilo-btn--xs" onClick={() => setFullscreen((current) => !current)}>
-              {fullscreen ? "Exit Full Screen" : "Full Screen"}
-            </button>
+            {!error ? (
+              <button type="button" className="vilo-btn vilo-btn--ghost vilo-btn--xs" onClick={() => setFullscreen((current) => !current)}>
+                {fullscreen ? "Exit Full Screen" : "Full Screen"}
+              </button>
+            ) : null}
             <button type="button" className="vilo-btn vilo-btn--ghost vilo-btn--xs" onClick={handleClose}>Close</button>
           </div>
         </div>

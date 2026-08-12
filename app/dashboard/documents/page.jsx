@@ -66,6 +66,7 @@ function DocumentsPageContent() {
   const [editWarning, setEditWarning] = useState("");
   const [editLoading, setEditLoading] = useState(false);
   const [onlyOfficeTarget, setOnlyOfficeTarget] = useState(null);
+  const [onlyOfficeMode, setOnlyOfficeMode] = useState("edit");
   const [versionTarget, setVersionTarget] = useState(null);
   const [versions, setVersions] = useState([]);
   const [success, setSuccess] = useState("");
@@ -398,8 +399,9 @@ function DocumentsPageContent() {
     }
   }
 
-  async function openOnlyOfficeModal(document) {
+  function openOnlyOfficeModal(document, mode = "edit") {
     setOnlyOfficeTarget(document);
+    setOnlyOfficeMode(mode);
     setMenuOpenId(null);
     setError("");
     setSuccess("");
@@ -416,6 +418,7 @@ function DocumentsPageContent() {
 
   async function closeOnlyOfficeModal() {
     setOnlyOfficeTarget(null);
+    if (onlyOfficeMode === "view") return;
     try {
       await load();
     } catch {
@@ -470,13 +473,34 @@ function DocumentsPageContent() {
     router.replace(`${pathname}?${params.toString()}`);
   }
 
-  function openDocumentPreview(document) {
+  async function viewDocument(document) {
     setMenuOpenId(null);
     setError("");
-    void openPreview({
+    const viewerType = getDocumentViewerType({
+      filename: document.file_name,
+      mediaType: document.file_type,
+    });
+
+    if (viewerType === "onlyoffice") {
+      openOnlyOfficeModal(document, "view");
+      return;
+    }
+
+    if (viewerType === "unsupported") {
+      try {
+        await apiDownload(`/api/v1/documents/${document.id}/download`);
+        setSuccess("This file type cannot be previewed. The file was downloaded instead.");
+      } catch (err) {
+        setError(err.message || "This file cannot be previewed. Download failed.");
+      }
+      return;
+    }
+
+    await openPreview({
       path: `/api/v1/documents/${document.id}/view`,
       downloadPath: `/api/v1/documents/${document.id}/download`,
       filename: document.file_name || document.title || `Document #${document.id}`,
+      expectedType: viewerType,
     });
   }
 
@@ -637,6 +661,7 @@ function DocumentsPageContent() {
                     <tbody>
                       {pageRows.map((document) => {
                         const caseRow = document.case_id ? casesById.get(Number(document.case_id)) : null;
+                        const viewerType = getDocumentViewerType({ filename: document.file_name, mediaType: document.file_type });
 
                         return (
                           <tr key={document.id}>
@@ -666,15 +691,15 @@ function DocumentsPageContent() {
                                 </button>
                                 {menuOpenId === document.id ? (
                                   <div className="case-actions-menu documents-actions-menu">
-                                    <button type="button" onClick={() => openDocumentPreview(document)}>View</button>
+                                    <button type="button" onClick={() => viewDocument(document)}>View</button>
                                     <button type="button" onClick={() => apiDownload(`/api/v1/documents/${document.id}/download`).catch((err) => setError(err.message || "Download failed"))}>Download</button>
-                                    {getDocumentViewerType({ filename: document.file_name, mediaType: document.file_type }) === "onlyoffice" ? (
-                                      <button type="button" onClick={() => openOnlyOfficeModal(document)}>Open in Word Editor</button>
+                                    {viewerType === "onlyoffice" ? (
+                                      <button type="button" onClick={() => openOnlyOfficeModal(document, "edit")}>Edit in Word</button>
                                     ) : null}
-                                    {getDocumentViewerType({ filename: document.file_name, mediaType: document.file_type }) === "onlyoffice" ? (
+                                    {viewerType === "onlyoffice" ? (
                                       <button type="button" onClick={() => openEditModal(document)}>Edit Content</button>
                                     ) : null}
-                                    {getDocumentViewerType({ filename: document.file_name, mediaType: document.file_type }) === "pdf" ? (
+                                    {viewerType === "pdf" ? (
                                       <button type="button" className="is-disabled" disabled title="PDF editing will be added later. Use Replace File for now.">
                                         PDF Editing Later
                                       </button>
@@ -912,7 +937,8 @@ function DocumentsPageContent() {
       {onlyOfficeTarget ? (
         <OnlyOfficeDocumentModal
           document={onlyOfficeTarget}
-          mode="edit"
+          mode={onlyOfficeMode}
+          downloadPath={`/api/v1/documents/${onlyOfficeTarget.id}/download`}
           onClose={closeOnlyOfficeModal}
         />
       ) : null}

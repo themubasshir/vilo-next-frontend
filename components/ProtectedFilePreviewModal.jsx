@@ -35,7 +35,7 @@ export function useProtectedFilePreview() {
     setPreview(CLOSED_PREVIEW);
   }, [releaseObjectUrl]);
 
-  const openPreview = useCallback(async ({ path, downloadPath = "", filename = "File preview" }) => {
+  const openPreview = useCallback(async ({ path, downloadPath = "", filename = "File preview", expectedType = "" }) => {
     if (requestRef.current.path === path && (requestRef.current.controller || loadedPathRef.current === path)) return;
     requestRef.current.controller?.abort();
     releaseObjectUrl();
@@ -74,12 +74,15 @@ export function useProtectedFilePreview() {
     } catch (error) {
       if (error?.name === "AbortError" || requestRef.current.id !== requestId) return;
       requestRef.current = { id: requestId, controller: null, path: "" };
+      const message = expectedType === "pdf"
+        ? "This PDF could not be loaded. The stored file may be missing or invalid."
+        : (error?.message || "Document could not be loaded");
       setPreview({
         ...CLOSED_PREVIEW,
         open: true,
         filename,
         downloadPath,
-        error: error?.message || "Document could not be loaded",
+        error: message,
       });
     }
   }, [releaseObjectUrl]);
@@ -188,15 +191,12 @@ export default function ProtectedFilePreviewModal({ preview, onClose }) {
           ) : null}
 
           {!preview.loading && !preview.error && !renderError && preview.previewType === "pdf" ? (
-            <object className="protected-file-preview-pdf" data={preview.objectUrl} type="application/pdf" aria-label={`Preview of ${preview.filename}`} onError={() => setRenderError(true)}>
-              <div className="protected-file-preview-message">
-                <p>Preview could not be displayed in this browser. Open the file in a new tab or download it.</p>
-                <div className="protected-file-preview-message__actions">
-                  <button type="button" className="vilo-btn vilo-btn--secondary" onClick={openInNewTab}>Open in New Tab</button>
-                  {preview.downloadPath ? <button type="button" className="vilo-btn vilo-btn--primary" onClick={download}>Download</button> : null}
-                </div>
-              </div>
-            </object>
+            <iframe
+              className="protected-file-preview-pdf"
+              src={preview.objectUrl}
+              title={`Preview of ${preview.filename}`}
+              onError={() => setRenderError(true)}
+            />
           ) : null}
 
           {!preview.loading && !preview.error && !renderError && preview.previewType === "image" ? (
