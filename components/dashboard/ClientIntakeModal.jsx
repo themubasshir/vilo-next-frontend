@@ -1,7 +1,43 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { DiscardChangesDialog, useModalCloseGuard } from "../useModalCloseGuard";
+
+const ID_TYPE_OPTIONS = [
+  { value: "national_id", label: "National ID" },
+  { value: "trn", label: "TRN" },
+  { value: "passport", label: "Passport" },
+  { value: "driver_licence", label: "Driver's License" },
+  { value: "other", label: "Other" },
+];
+const ACCEPTED_ID_EXTENSIONS = new Set(["pdf", "doc", "docx", "jpg", "jpeg", "png"]);
+const MAX_ID_FILE_BYTES = 10 * 1024 * 1024;
+
+function fileIdentity(file) {
+  return `${file.name}\u0000${file.size}\u0000${file.lastModified}`;
+}
+
+function entryKey(file) {
+  return globalThis.crypto?.randomUUID?.() || `${fileIdentity(file)}\u0000${Date.now()}\u0000${Math.random()}`;
+}
+
+function validateIdFile(file) {
+  const extension = String(file.name || "").split(".").pop()?.toLowerCase();
+  if (!extension || !ACCEPTED_ID_EXTENSIONS.has(extension)) {
+    return `${file.name || "This file"}: This file type is not supported. Please upload PDF, DOC/DOCX, JPG, or PNG.`;
+  }
+  if (file.size > MAX_ID_FILE_BYTES) {
+    return `${file.name} exceeds the 10MB file size limit. Please upload a smaller file.`;
+  }
+  if (!file.size) return `${file.name}: Empty files cannot be uploaded.`;
+  return "";
+}
+
+function formatFileSize(bytes) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.ceil(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(bytes >= 10 * 1024 * 1024 ? 0 : 1)} MB`;
+}
 
 const initialState = {
   client_type: "individual",
@@ -79,15 +115,22 @@ export default function ClientIntakeModal({
 }) {
   const [form, setForm] = useState(initialState);
   const [initialForm, setInitialForm] = useState(initialState);
-  const [idFile, setIdFile] = useState(null);
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [fileErrors, setFileErrors] = useState([]);
+  const [dragActive, setDragActive] = useState(false);
   const [errors, setErrors] = useState({});
   const [attachmentRemoved, setAttachmentRemoved] = useState(false);
   const [attachmentError, setAttachmentError] = useState("");
+  const fileInputRef = useRef(null);
+  const dragDepthRef = useRef(0);
 
   useEffect(() => {
     if (!open) return;
     setErrors({});
-    setIdFile(null);
+    setSelectedIds([]);
+    setFileErrors([]);
+    setDragActive(false);
+    dragDepthRef.current = 0;
     setAttachmentRemoved(false);
     setAttachmentError("");
     const next = client ? parseClient(client) : initialState;
@@ -97,8 +140,8 @@ export default function ClientIntakeModal({
 
   const title = useMemo(() => (mode === "edit" ? "Edit Client" : "Client Intake Form"), [mode]);
   const dirty = useMemo(
-    () => JSON.stringify(form) !== JSON.stringify(initialForm) || Boolean(idFile) || attachmentRemoved,
-    [attachmentRemoved, form, initialForm, idFile],
+    () => JSON.stringify(form) !== JSON.stringify(initialForm) || selectedIds.length > 0 || attachmentRemoved,
+    [attachmentRemoved, form, initialForm, selectedIds.length],
   );
   const closeGuard = useModalCloseGuard({ open, isDirty: dirty, isSubmitting: saving, onClose, onDiscard: onDiscardDraft });
 
@@ -123,7 +166,74 @@ export default function ClientIntakeModal({
     e.preventDefault();
     if (saving) return;
     if (!validate()) return;
-    await onSubmit(payloadFromState(form, client), idFile, { removeDraftAttachment: attachmentRemoved });
+    const validatedIds = selectedIds.map((entry) => ({ ...entry, error: validateIdFile(entry.file) }));
+    const invalidIds = validatedIds.filter((entry) => entry.error);
+    if (invalidIds.length) {
+      setSelectedIds(validatedIds);
+      return;
+    }
+    await onSubmit(
+      payloadFromState(form, client),
+      validatedIds.map(({ file, idType }) => ({ file, idType })),
+      { removeDraftAttachment: attachmentRemoved },
+    );
+  }
+
+  function addFiles(fileList) {
+    const files = Array.from(fileList || []);
+    if (!files.length) return;
+    const identities = new Set(selectedIds.map((entry) => fileIdentity(entry.file)));
+    const additions = [];
+    const rejected = [];
+    files.forEach((file) => {
+      const identity = fileIdentity(file);
+      if (identities.has(identity)) {
+        rejected.push({ key: entryKey(file), message: `${file.name} is already selected.` });
+        return;
+      }
+      identities.add(identity);
+      const error = validateIdFile(file);
+      if (error) {
+        rejected.push({ key: entryKey(file), message: error });
+        return;
+      }
+      additions.push({ key: entryKey(file), file, idType: "other", error: "" });
+    });
+    if (additions.length) setSelectedIds((current) => [...current, ...additions]);
+    if (rejected.length) setFileErrors((current) => [...current, ...rejected]);
+  }
+
+  function handleFileInput(event) {
+    addFiles(event.target.files);
+    event.target.value = "";
+  }
+
+  function handleDragEnter(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    dragDepthRef.current += 1;
+    setDragActive(true);
+  }
+
+  function handleDragOver(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
+  }
+
+  function handleDragLeave(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+    if (dragDepthRef.current === 0) setDragActive(false);
+  }
+
+  function handleDrop(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    dragDepthRef.current = 0;
+    setDragActive(false);
+    addFiles(event.dataTransfer?.files);
   }
 
   const corporate = isCorporateType(form.client_type);
@@ -176,25 +286,62 @@ export default function ClientIntakeModal({
                       setAttachmentError(err.message || "Stored attachment could not be loaded.");
                     }
                   }}>View</button>
-                  <button type="button" className="vilo-btn vilo-btn--danger vilo-btn--xs" onClick={() => { setAttachmentRemoved(true); setIdFile(null); }}>Remove</button>
+                  <button type="button" className="vilo-btn vilo-btn--danger vilo-btn--xs" onClick={() => setAttachmentRemoved(true)} aria-label={`Remove saved attachment ${draftAttachment.file_name}`}>Remove</button>
                 </div>
               </div>
             ) : null}
-            <label className="client-upload-dropzone">
-              <strong>{draftAttachment && !attachmentRemoved ? "Replace saved attachment" : "Drag & drop or Browse"}</strong>
-              <span>PDF, DOC/DOCX, JPG, PNG. Max file size 10MB</span>
+            <div
+              className={`client-upload-dropzone${dragActive ? " is-drag-active" : ""}`}
+              onDragEnter={handleDragEnter}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+            >
+              <strong>Drag &amp; drop ID files here or <button type="button" className="client-upload-browse" onClick={() => fileInputRef.current?.click()}>Browse</button></strong>
+              <span>PDF, DOC/DOCX, JPG, PNG. Max file size 10MB each.</span>
               <input
+                ref={fileInputRef}
                 type="file"
+                multiple
                 accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
-                onChange={(e) => {
-                  setIdFile(e.target.files?.[0] || null);
-                  if (e.target.files?.[0]) setAttachmentRemoved(false);
-                }}
+                onChange={handleFileInput}
                 style={{ display: "none" }}
+                aria-label="Browse for ID files"
               />
-            </label>
-            {idFile ? <p className="vilo-state">Selected replacement: {idFile.name}</p> : null}
-            {attachmentRemoved && !idFile ? <p className="vilo-state">The saved attachment will be removed when you save or complete this intake.</p> : null}
+            </div>
+            {selectedIds.length ? <div className="client-selected-ids" aria-live="polite">
+              <p className="client-selected-ids__count">{selectedIds.length} ID {selectedIds.length === 1 ? "file" : "files"} selected</p>
+              <div className="client-selected-ids__list">
+                {selectedIds.map((entry) => <div className="client-selected-id" key={entry.key}>
+                  <div className="client-selected-id__type">
+                    <label htmlFor={`intake-id-type-${entry.key}`}>ID Type</label>
+                    <select
+                      id={`intake-id-type-${entry.key}`}
+                      value={entry.idType}
+                      onChange={(event) => setSelectedIds((current) => current.map((item) => item.key === entry.key ? { ...item, idType: event.target.value } : item))}
+                    >
+                      {ID_TYPE_OPTIONS.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}
+                    </select>
+                  </div>
+                  <div className="client-selected-id__file">
+                    <strong title={entry.file.name}>{entry.file.name}</strong>
+                    <span>{formatFileSize(entry.file.size)}</span>
+                    <small className={entry.error ? "vilo-form-error" : "client-selected-id__ready"}>{entry.error || "Ready to upload"}</small>
+                  </div>
+                  <button type="button" className="vilo-btn vilo-btn--ghost vilo-btn--xs" onClick={() => setSelectedIds((current) => current.filter((item) => item.key !== entry.key))} aria-label={`Remove ${entry.file.name}`}>Remove</button>
+                </div>)}
+              </div>
+              <button type="button" className="client-add-another-id" onClick={() => fileInputRef.current?.click()}>+ Add another ID</button>
+            </div> : null}
+            {fileErrors.length ? <div className="client-upload-errors" aria-live="polite">
+              {fileErrors.map((item) => <div className="client-upload-error" key={item.key}>
+                <span>{item.message}</span>
+                <button type="button" className="vilo-btn vilo-btn--ghost vilo-btn--xs" onClick={() => setFileErrors((current) => current.filter((error) => error.key !== item.key))} aria-label="Dismiss file error">Dismiss</button>
+              </div>)}
+            </div> : null}
+            {selectedIds.length > 1 && !(draftAttachment && !attachmentRemoved) ? <p className="client-draft-file-notice">This draft can store one ID file. If you save it, {selectedIds[0].file.name} will be retained; {selectedIds.length - 1} additional selected {selectedIds.length - 1 === 1 ? "file" : "files"} must be reselected when the draft is reopened.</p> : null}
+            {selectedIds.length && draftAttachment && !attachmentRemoved ? <p className="client-draft-file-notice">The saved attachment will be preserved. Newly selected IDs are available for final submission, but must be reselected if you save and reopen this draft.</p> : null}
+            {attachmentRemoved ? <p className="vilo-state">The saved attachment will be removed when you save or complete this intake.</p> : null}
             {attachmentError ? <p className="vilo-state vilo-state--error">{attachmentError}</p> : null}
           </div> : null}
 
@@ -217,7 +364,7 @@ export default function ClientIntakeModal({
         onKeepEditing={closeGuard.keepEditing}
         onDiscard={closeGuard.discard}
         onSaveDraft={mode === "create" && onSaveDraft ? async () => {
-          await onSaveDraft(form, idFile, { removeDraftAttachment: attachmentRemoved });
+          await onSaveDraft(form, selectedIds.map(({ file, idType }) => ({ file, idType })), { removeDraftAttachment: attachmentRemoved });
           closeGuard.keepEditing();
         } : undefined}
         saving={saving}

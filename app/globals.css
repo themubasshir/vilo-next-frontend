@@ -5642,10 +5642,134 @@ button {
   text-align: center;
   color: #6d6880;
   gap: 0.25rem;
+  padding: 0.8rem;
+  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
 }
 
-.client-upload-dropzone strong {
+.client-upload-dropzone.is-drag-active {
+  border-color: #6658f6;
+  background: #f1efff;
+  box-shadow: 0 0 0 3px rgb(79 66 240 / 10%);
+}
+
+.client-upload-dropzone strong,
+.client-upload-browse,
+.client-add-another-id {
   color: #4f42f0;
+}
+
+.client-upload-browse,
+.client-add-another-id {
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.client-selected-ids {
+  margin-top: 0.7rem;
+}
+
+.client-upload-block .client-selected-ids__count {
+  margin-bottom: 0.45rem;
+  color: #413b57;
+}
+
+.client-selected-ids__list {
+  overflow: hidden;
+  border: 1px solid #ded8ef;
+  border-radius: 12px;
+}
+
+.client-selected-id {
+  display: grid;
+  grid-template-columns: minmax(145px, 0.8fr) minmax(0, 1.6fr) auto;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.7rem 0.8rem;
+  background: #fff;
+}
+
+.client-selected-id + .client-selected-id {
+  border-top: 1px solid #ebe7f4;
+}
+
+.client-selected-id__type label {
+  font-size: 0.75rem;
+}
+
+.client-selected-id__type select {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid #e0dbea;
+  border-radius: 9px;
+  background: #fff;
+  padding: 0.5rem 0.6rem;
+}
+
+.client-selected-id__file {
+  min-width: 0;
+}
+
+.client-selected-id__file strong,
+.client-selected-id__file span,
+.client-selected-id__file small {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.client-selected-id__file span {
+  color: #7a768f;
+  font-size: 0.78rem;
+}
+
+.client-selected-id__ready {
+  margin-top: 0.12rem;
+  color: #38845b;
+}
+
+.client-add-another-id {
+  margin-top: 0.55rem;
+}
+
+.client-upload-errors {
+  display: grid;
+  gap: 0.4rem;
+  margin-top: 0.6rem;
+}
+
+.client-upload-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid #f0c7cc;
+  border-radius: 9px;
+  background: #fff5f6;
+  color: #a82f3b;
+  font-size: 0.82rem;
+}
+
+.client-draft-file-notice {
+  margin-top: 0.55rem !important;
+  color: #6d6880 !important;
+  font-size: 0.8rem;
+  font-weight: 400 !important;
+}
+
+@media (max-width: 640px) {
+  .client-selected-id {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .client-selected-id__type {
+    grid-column: 1 / -1;
+  }
 }
 
 .vilo-form-error {

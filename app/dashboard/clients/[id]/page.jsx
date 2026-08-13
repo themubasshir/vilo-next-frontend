@@ -117,7 +117,7 @@ export default function ClientDetailPage() {
     if (id) load();
   }, [id]);
 
-  async function handleEdit(payload, idFile) {
+  async function handleEdit(payload) {
     if (!client) return;
     setSaving(true);
     setError("");
@@ -127,12 +127,6 @@ export default function ClientDetailPage() {
         method: "PATCH",
         body: JSON.stringify(payload),
       });
-      if (idFile) {
-        const formData = new FormData();
-        formData.append("file", idFile);
-        formData.append("id_type", "other");
-        await apiUpload(`/api/v1/clients/${client.id}/id-documents`, formData);
-      }
       setEditOpen(false);
       setSuccess("Client updated successfully.");
       await load();

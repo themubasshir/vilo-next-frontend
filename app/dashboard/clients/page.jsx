@@ -49,6 +49,7 @@ function ClientsPageContent() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [createdClientId, setCreatedClientId] = useState(null);
 
   const [tab, setTab] = useState("all");
   const [searchDraft, setSearchDraft] = useState("");
@@ -89,11 +90,11 @@ function ClientsPageContent() {
     if (searchParams.get("create") === "1") setCreateOpen(true);
   }, [searchParams]);
 
-  async function uploadClientIdFile(clientId, file) {
-    if (!file) return;
+  async function uploadClientIdFile(clientId, selectedId) {
+    if (!selectedId?.file) return;
     const formData = new FormData();
-    formData.append("file", file);
-    formData.append("id_type", "other");
+    formData.append("file", selectedId.file);
+    formData.append("id_type", selectedId.idType);
     await apiUpload(`/api/v1/clients/${clientId}/id-documents`, formData);
   }
 
@@ -103,26 +104,34 @@ function ClientsPageContent() {
     return apiUpload(`/api/v1/clients/intake-drafts/${draftId}/attachment`, formData);
   }
 
-  async function handleCreate(payload, idFile, options = {}) {
+  async function handleCreate(payload, selectedIds = [], options = {}) {
     if (saving) return;
     setSaving(true);
     setError("");
     setSuccess("");
+    setCreatedClientId(null);
     try {
-      if (selectedDraft && idFile) {
-        const attachment = await uploadDraftAttachment(selectedDraft.id, idFile);
-        setSelectedDraft((current) => ({ ...current, attachment }));
-      }
       const includeAttachment = options.removeDraftAttachment ? "false" : "true";
       const created = await apiRequest(selectedDraft ? `/api/v1/clients/intake-drafts/${selectedDraft.id}/complete?include_attachment=${includeAttachment}` : "/api/v1/clients", {
         method: "POST",
         body: JSON.stringify(payload),
       });
-      if (!selectedDraft) await uploadClientIdFile(created.id, idFile);
+      const uploadResults = await Promise.allSettled(selectedIds.map((selectedId) => uploadClientIdFile(created.id, selectedId)));
+      const failedFiles = uploadResults
+        .map((result, index) => result.status === "rejected" ? selectedIds[index].file.name : null)
+        .filter(Boolean);
+      const uploadedCount = selectedIds.length - failedFiles.length;
       setCreateOpen(false);
       setSelectedDraft(null);
       await load();
-      setSuccess("Client created successfully.");
+      setCreatedClientId(created.id);
+      if (!selectedIds.length) {
+        setSuccess("Client created successfully.");
+      } else if (!failedFiles.length) {
+        setSuccess(`Client created successfully. ${uploadedCount} ID ${uploadedCount === 1 ? "document" : "documents"} uploaded.`);
+      } else {
+        setSuccess(`Client created successfully. ${uploadedCount} of ${selectedIds.length} ID documents uploaded. ${failedFiles.join(", ")} could not be uploaded.`);
+      }
     } catch (err) {
       setError(err.message || "Failed to create client");
     } finally {
@@ -130,7 +139,7 @@ function ClientsPageContent() {
     }
   }
 
-  async function saveClientDraft(draftForm, idFile, options = {}) {
+  async function saveClientDraft(draftForm, selectedIds = [], options = {}) {
     if (saving) return;
     setSaving(true);
     setError("");
@@ -140,15 +149,19 @@ function ClientsPageContent() {
         method: selectedDraft ? "PATCH" : "POST",
         body: JSON.stringify({ payload: draftForm }),
       });
-      if (idFile) {
-        await uploadDraftAttachment(saved.id, idFile);
+      const mayStorePendingFile = !selectedDraft?.attachment || options.removeDraftAttachment;
+      if (selectedIds.length && mayStorePendingFile) {
+        await uploadDraftAttachment(saved.id, selectedIds[0].file);
       } else if (options.removeDraftAttachment && selectedDraft?.attachment) {
         await apiRequest(`/api/v1/clients/intake-drafts/${saved.id}/attachment`, { method: "DELETE" });
       }
       setCreateOpen(false);
       setSelectedDraft(null);
       await load();
-      setSuccess("Client intake saved as draft.");
+      const pendingFilesNotSaved = selectedIds.length - (selectedIds.length && mayStorePendingFile ? 1 : 0);
+      setSuccess(pendingFilesNotSaved
+        ? `Client intake saved as draft. ${pendingFilesNotSaved} selected ID ${pendingFilesNotSaved === 1 ? "file was" : "files were"} not saved and must be reselected when the draft is reopened.`
+        : "Client intake saved as draft.");
     } catch (err) {
       if (saved) setSelectedDraft({ ...saved, attachment: selectedDraft?.attachment || null });
       setError(err.message || "Client intake draft could not be saved.");
@@ -168,7 +181,7 @@ function ClientsPageContent() {
     }
   }
 
-  async function handleEdit(payload, idFile) {
+  async function handleEdit(payload) {
     if (!editClient || saving) return;
     setSaving(true);
     setError("");
@@ -178,7 +191,6 @@ function ClientsPageContent() {
         method: "PATCH",
         body: JSON.stringify(payload),
       });
-      await uploadClientIdFile(editClient.id, idFile);
       setEditClient(null);
       await load();
       setSuccess("Client updated successfully.");
@@ -277,7 +289,7 @@ function ClientsPageContent() {
       </div>
 
       {error ? <div className="vilo-state-block"><p className="vilo-state vilo-state--error">{error}</p></div> : null}
-      {success ? <div className="vilo-state-block"><p className="vilo-state vilo-state--success">{success}</p></div> : null}
+      {success ? <div className="vilo-state-block"><p className="vilo-state vilo-state--success">{success}{createdClientId && success.startsWith("Client created") ? <> <Link href={`/dashboard/clients/${createdClientId}`}>Open Client Details → Client IDs</Link></> : null}</p></div> : null}
 
       <article className="dashboard-card clients-list-card">
         <div className="clients-tabs-row">
@@ -391,6 +403,7 @@ function ClientsPageContent() {
         client={editClient}
         saving={saving}
         apiError={error}
+        showIdUpload={false}
         onClose={() => setEditClient(null)}
         onSubmit={handleEdit}
       />

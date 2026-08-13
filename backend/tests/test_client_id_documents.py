@@ -291,6 +291,23 @@ def test_upload_rejects_unsupported_file_type(monkeypatch):
             cleanup(client)
 
 
+def test_upload_rejects_client_id_over_size_limit(monkeypatch):
+    client_row = _client_obj()
+    db = ClientDocsDBStub(scalar_values=[client_row])
+    client = build_client("partner", db)
+    with TemporaryDirectory() as tmpdir:
+        monkeypatch.setattr(clients_module, "STORAGE_ROOT", Path(tmpdir))
+        try:
+            res = client.post(
+                "/api/v1/clients/7/id-documents",
+                files={"file": ("large.pdf", b"0" * (clients_module.MAX_UPLOAD_BYTES + 1), "application/pdf")},
+            )
+            assert res.status_code == 400
+            assert res.json()["detail"] == "File exceeds upload size limit"
+        finally:
+            cleanup(client)
+
+
 def test_existing_case_document_upload_flow_still_works(monkeypatch):
     db = ClientDocsDBStub()
     client = build_client("partner", db)
