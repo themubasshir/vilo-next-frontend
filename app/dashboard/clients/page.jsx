@@ -283,27 +283,27 @@ function ClientsPageContent() {
 
   return (
     <section className="dashboard-page-stack">
-      <div className="clients-header-row">
-        <div className="dashboard-page-heading"><h1>Clients</h1></div>
-        <button type="button" className="vilo-btn vilo-btn--secondary" onClick={() => setCreateOpen(true)}>+ New Client</button>
+      <div className="dashboard-page-heading dashboard-page-heading--split module-page-header">
+        <h1>Clients</h1>
+        <button type="button" className="vilo-btn vilo-btn--primary module-create-button" onClick={() => setCreateOpen(true)}>+ New Client</button>
       </div>
 
       {error ? <div className="vilo-state-block"><p className="vilo-state vilo-state--error">{error}</p></div> : null}
       {success ? <div className="vilo-state-block"><p className="vilo-state vilo-state--success">{success}{createdClientId && success.startsWith("Client created") ? <> <Link href={`/dashboard/clients/${createdClientId}`}>Open Client Details → Client IDs</Link></> : null}</p></div> : null}
 
-      <article className="dashboard-card clients-list-card">
-        <div className="clients-tabs-row">
-          <button type="button" className={tab === "all" ? "case-tab-btn is-active" : "case-tab-btn"} onClick={() => setTab("all")}>All ({allCount})</button>
-          <button type="button" className={tab === "active" ? "case-tab-btn is-active" : "case-tab-btn"} onClick={() => setTab("active")}>Active ({activeCount})</button>
-          <button type="button" className={tab === "archived" ? "case-tab-btn is-active" : "case-tab-btn"} onClick={() => setTab("archived")}>Archived ({archivedCount})</button>
-          <button type="button" className={tab === "draft" ? "case-tab-btn is-active" : "case-tab-btn"} onClick={() => setTab("draft")}>Intake Drafts ({drafts.length})</button>
+      <article className="dashboard-card module-list-card" aria-label="Clients list">
+        <div className="module-tabs-row" role="tablist" aria-label="Client status">
+          <button type="button" role="tab" aria-selected={tab === "all"} className={tab === "all" ? "case-tab-btn is-active" : "case-tab-btn"} onClick={() => setTab("all")}>All ({allCount})</button>
+          <button type="button" role="tab" aria-selected={tab === "active"} className={tab === "active" ? "case-tab-btn is-active" : "case-tab-btn"} onClick={() => setTab("active")}>Active ({activeCount})</button>
+          <button type="button" role="tab" aria-selected={tab === "archived"} className={tab === "archived" ? "case-tab-btn is-active" : "case-tab-btn"} onClick={() => setTab("archived")}>Archived ({archivedCount})</button>
+          <button type="button" role="tab" aria-selected={tab === "draft"} className={tab === "draft" ? "case-tab-btn is-active" : "case-tab-btn"} onClick={() => setTab("draft")}>Intake Drafts ({drafts.length})</button>
         </div>
 
         <div className="clients-toolbar-row">
-          <input className="case-search-input" placeholder="Search" value={searchDraft} onChange={(e) => setSearchDraft(e.target.value)} />
+          <input className="case-search-input" aria-label="Search clients" placeholder="Search" value={searchDraft} onChange={(e) => setSearchDraft(e.target.value)} />
           <button className="vilo-btn vilo-btn--primary" type="button" onClick={() => setSearch(searchDraft)}>Search</button>
           <div className="clients-select-wrap">Sort By:
-            <select value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
+            <select aria-label="Sort clients by" value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
               <option value="case">Case</option>
               <option value="name">Name</option>
               <option value="type">Client Type</option>
@@ -311,7 +311,7 @@ function ClientsPageContent() {
             </select>
           </div>
           <div className="clients-select-wrap">Per Page:
-            <select value={perPage} onChange={(e) => setPerPage(Number(e.target.value))}>
+            <select aria-label="Clients per page" value={perPage} onChange={(e) => setPerPage(Number(e.target.value))}>
               <option value={10}>10</option>
               <option value={20}>20</option>
               <option value={50}>50</option>
@@ -328,7 +328,7 @@ function ClientsPageContent() {
           {tab !== "draft" && !loading && !filtered.length ? <div className="vilo-state-block"><p className="vilo-state">No clients matched your current filters.</p></div> : null}
 
           {tab !== "draft" && !loading && filtered.length ? (
-            <div className="vilo-table-wrap case-table-wrap">
+            <div className={`vilo-table-wrap case-table-wrap${actionOpenId ? " case-table-wrap--menu-visible" : ""}`}>
               <table className="team-table">
                 <thead>
                   <tr>
@@ -337,7 +337,7 @@ function ClientsPageContent() {
                     <th>Primary Case</th>
                     <th>Email</th>
                     <th>Phone</th>
-                    <th>Actions</th>
+                    <th className="case-action-cell">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -348,9 +348,9 @@ function ClientsPageContent() {
                       <td>{client.primaryCase || "-"}</td>
                       <td>{client.email || "-"}</td>
                       <td>{client.phone || "-"}</td>
-                      <td onClick={(e) => e.stopPropagation()}>
-                        <div className="vilo-table-actions" style={{ position: "relative" }}>
-                          <button className="vilo-btn vilo-btn--ghost vilo-btn--xs" type="button" onClick={() => setActionOpenId((openId) => (openId === client.id ? null : client.id))}>•••</button>
+                      <td className="case-action-cell" onClick={(e) => e.stopPropagation()}>
+                        <div className="vilo-table-actions case-row-actions">
+                          <button className="vilo-btn vilo-btn--ghost vilo-btn--xs" type="button" aria-label={`Open actions for ${client.name || "client"}`} onClick={() => setActionOpenId((openId) => (openId === client.id ? null : client.id))}>•••</button>
                           {actionOpenId === client.id ? (
                             <div className="case-actions-menu">
                               <Link href={`/dashboard/clients/${client.id}`}>View Client</Link>

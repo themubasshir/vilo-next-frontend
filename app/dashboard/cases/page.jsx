@@ -42,7 +42,7 @@ function CasesPageContent() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [createOpen, setCreateOpen] = useState(searchParams.get("create") === "1");
-  const [statusFilter, setStatusFilter] = useState(searchParams.get("status") || "active");
+  const [statusFilter, setStatusFilter] = useState(searchParams.get("status") || "all");
   const [staffFilter, setStaffFilter] = useState(searchParams.get("assigned_user_id") || "");
   const [clientFilter, setClientFilter] = useState(searchParams.get("client_id") || "");
   const [createdFrom, setCreatedFrom] = useState(searchParams.get("created_from") || "");
@@ -300,11 +300,11 @@ function CasesPageContent() {
 
   return (
     <section className="dashboard-page-stack">
-      <div className="dashboard-page-heading dashboard-page-heading--split">
+      <div className="dashboard-page-heading dashboard-page-heading--split module-page-header">
         <h1>Cases</h1>
         <button
           type="button"
-          className={createOpen ? "vilo-btn vilo-btn--secondary" : "vilo-btn vilo-btn--primary"}
+          className="vilo-btn vilo-btn--primary module-create-button"
           aria-expanded={createOpen}
           onClick={() => {
             if (createOpen) createCloseGuard.requestClose();
@@ -312,7 +312,7 @@ function CasesPageContent() {
             setSuccess("");
           }}
         >
-          Create Case
+          + New Case
         </button>
       </div>
 
@@ -350,14 +350,13 @@ function CasesPageContent() {
         </div>
       ) : null}
 
-      <article className="dashboard-card vilo-table-card">
-        <div className="dashboard-card__header"><h2>Case List</h2></div>
-        <div className="cases-status-tabs" role="tablist" aria-label="Case status">
+      <article className="dashboard-card module-list-card" aria-label="Cases list">
+        <div className="module-tabs-row" role="tablist" aria-label="Case status">
           {[
-            ["active", "Active"], ["draft", "Draft"], ["closed", "Closed"], ["archived", "Archived"], ["all", "All"],
+            ["all", "All"], ["active", "Active"], ["draft", "Draft"], ["closed", "Closed"], ["archived", "Archived"],
           ].map(([value, label]) => (
             <button key={value} type="button" role="tab" aria-selected={statusFilter === value} className={`case-tab-btn${statusFilter === value ? " is-active" : ""}`} onClick={() => changeFilter(setStatusFilter, value)}>
-              {label} <span>{value === "all" ? Object.values(counts).reduce((sum, count) => sum + count, 0) : counts[value] || 0}</span>
+              {label} ({value === "all" ? Object.values(counts).reduce((sum, count) => sum + count, 0) : counts[value] || 0})
             </button>
           ))}
         </div>
@@ -369,20 +368,21 @@ function CasesPageContent() {
           <label><span>Created to</span><input type="date" value={createdTo} onChange={(event) => changeFilter(setCreatedTo, event.target.value)} /></label>
           <button type="button" className="vilo-btn vilo-btn--secondary" onClick={clearFilters}>Clear filters</button>
         </div>
-        {loading ? <p className="vilo-state">Loading cases...</p> : null}
-        {error ? <p className="vilo-state vilo-state--error">{error}</p> : null}
-        {!loading && !error && cases.length === 0 ? <p className="vilo-state">No cases match the current filters.</p> : null}
+        <div className="case-tab-panel module-table-panel">
+          {loading ? <p className="vilo-state">Loading cases...</p> : null}
+          {error ? <p className="vilo-state vilo-state--error">{error}</p> : null}
+          {!loading && !error && cases.length === 0 ? <p className="vilo-state">No cases match the current filters.</p> : null}
 
-        {!loading && !error && cases.length > 0 ? (
-          <div className={`vilo-table-wrap case-table-wrap${menuOpenId ? " case-table-wrap--menu-visible" : ""}`}>
-            <table className="team-table case-list-table">
+          {!loading && !error && cases.length > 0 ? (
+            <div className={`vilo-table-wrap case-table-wrap${menuOpenId ? " case-table-wrap--menu-visible" : ""}`}>
+              <table className="team-table case-list-table">
               <thead>
                 <tr>
                   <th className="case-title-cell">Title</th>
                   <th className="case-badge-cell">Status</th>
                   <th className="case-badge-cell">Priority</th>
                   <th>Client</th>
-                  <th className="case-action-cell">Action</th>
+                  <th className="case-action-cell">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -397,6 +397,7 @@ function CasesPageContent() {
                         <button
                           type="button"
                           className="vilo-btn vilo-btn--ghost vilo-btn--xs inline-flex h-8 w-8 items-center justify-center p-0 text-base leading-none"
+                          aria-label={`Open actions for ${c.title || "case"}`}
                           onClick={() => setMenuOpenId(menuOpenId === c.id ? null : c.id)}
                         >
                           •••
@@ -413,20 +414,21 @@ function CasesPageContent() {
                   </tr>
                 ))}
               </tbody>
-            </table>
-          </div>
-        ) : null}
-        {!loading && !error && total > 0 ? (
-          <div className="case-pagination-row cases-list-pagination">
-            <span>Showing {(page - 1) * perPage + 1}-{Math.min(page * perPage, total)} of {total}</span>
-            <div className="vilo-table-actions">
-              <select aria-label="Cases per page" value={perPage} onChange={(event) => { setPage(1); setPerPage(Number(event.target.value)); }}><option value="10">10</option><option value="25">25</option><option value="50">50</option></select>
-              <button type="button" className="vilo-btn vilo-btn--secondary vilo-btn--xs" disabled={page <= 1} onClick={() => setPage((value) => value - 1)}>Previous</button>
-              <span>Page {page} of {totalPages}</span>
-              <button type="button" className="vilo-btn vilo-btn--secondary vilo-btn--xs" disabled={page >= totalPages} onClick={() => setPage((value) => value + 1)}>Next</button>
+              </table>
             </div>
-          </div>
-        ) : null}
+          ) : null}
+          {!loading && !error && total > 0 ? (
+            <div className="case-pagination-row cases-list-pagination">
+              <span>Showing {(page - 1) * perPage + 1}-{Math.min(page * perPage, total)} of {total}</span>
+              <div className="vilo-table-actions">
+                <select aria-label="Cases per page" value={perPage} onChange={(event) => { setPage(1); setPerPage(Number(event.target.value)); }}><option value="10">10</option><option value="25">25</option><option value="50">50</option></select>
+                <button type="button" className="vilo-btn vilo-btn--secondary vilo-btn--xs" disabled={page <= 1} onClick={() => setPage((value) => value - 1)}>Previous</button>
+                <span>Page {page} of {totalPages}</span>
+                <button type="button" className="vilo-btn vilo-btn--secondary vilo-btn--xs" disabled={page >= totalPages} onClick={() => setPage((value) => value + 1)}>Next</button>
+              </div>
+            </div>
+          ) : null}
+        </div>
       </article>
 
       {editCase ? (

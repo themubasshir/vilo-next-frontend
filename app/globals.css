@@ -378,16 +378,6 @@ button {
 .dashboard-navbar__timer-button.is-running { width: auto; padding: 0 0.45rem; color: #5d46f6; background: #f1efff; }
 .dashboard-navbar__timer-button > span { margin-left: 0.3rem; font-size: 0.72rem; font-variant-numeric: tabular-nums; }
 
-.cases-status-tabs {
-  display: flex;
-  gap: 0.25rem;
-  overflow-x: auto;
-  padding: 0 1rem;
-  border-bottom: 1px solid #ece8f5;
-}
-
-.cases-status-tabs .case-tab-btn span { margin-left: 0.25rem; color: #8d889f; font-size: 0.75rem; }
-
 .cases-filter-grid,
 .documents-advanced-filters {
   display: grid;
@@ -404,6 +394,10 @@ button {
 .cases-filter-grid select,
 .documents-advanced-filters input,
 .documents-advanced-filters select { min-width: 0; width: 100%; border: 1px solid #e1deec; border-radius: 8px; background: #fff; padding: 0.55rem; }
+.cases-filter-grid { grid-template-columns: repeat(auto-fit, minmax(155px, 1fr)); }
+.cases-filter-grid input,
+.cases-filter-grid select { min-height: 2.55rem; border-radius: 10px; padding: 0.65rem 0.75rem; }
+.cases-filter-grid > .vilo-btn { min-height: 2.55rem; }
 .cases-list-pagination { padding: 0.8rem 1rem 1rem; }
 .documents-advanced-filters { grid-template-columns: repeat(4, minmax(130px, 1fr)); padding: 0 0 1rem; }
 
@@ -4378,17 +4372,32 @@ button {
 }
 
 .case-tab-btn {
+  flex: 0 0 auto;
   border: 0;
   background: transparent;
   color: #5e5972;
   font-weight: 600;
   padding: 0.75rem 0.9rem;
   border-bottom: 2px solid transparent;
+  white-space: nowrap;
 }
 
 .case-tab-btn.is-active {
   color: #4f42f0;
   border-bottom-color: #4f42f0;
+}
+
+.case-tab-btn:hover {
+  color: #4f42f0;
+  background: rgba(79, 66, 240, 0.04);
+}
+
+.case-tab-btn:focus-visible,
+.module-create-button:focus-visible,
+.cases-filter-grid :is(input, select, button):focus-visible,
+.clients-toolbar-row :is(input, select, button):focus-visible {
+  outline: 3px solid rgba(79, 66, 240, 0.2);
+  outline-offset: 2px;
 }
 
 .case-tab-panel {
@@ -4449,6 +4458,8 @@ button {
 }
 
 .case-table-wrap {
+  max-width: 100%;
+  min-width: 0;
   padding: 0;
 }
 
@@ -4715,20 +4726,30 @@ button {
   padding: 0.95rem 1rem 1rem;
 }
 
-.clients-header-row {
-  display: flex;
+.module-page-header {
   align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
+  margin-bottom: 0;
 }
 
-.clients-list-card {
+.module-create-button {
+  min-height: 2.35rem;
+  white-space: nowrap;
+}
+
+.clients-list-card,
+.module-list-card {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   padding: 0;
 }
 
-.clients-tabs-row {
+.clients-tabs-row,
+.module-tabs-row {
   display: flex;
   gap: 0.35rem;
+  max-width: 100%;
+  overflow-x: auto;
   border-bottom: 1px solid #ece8f5;
   padding: 0.75rem 1.25rem 0;
 }
@@ -4741,6 +4762,11 @@ button {
   padding: 1rem 1.25rem 0.4rem;
 }
 
+.clients-toolbar-row > .vilo-btn,
+.clients-toolbar-row > .case-search-input {
+  min-height: 2.55rem;
+}
+
 .clients-select-wrap {
   justify-self: end;
   color: #615c73;
@@ -4749,9 +4775,24 @@ button {
 .clients-select-wrap select {
   margin-left: 0.35rem;
   border: 1px solid #e8e4f3;
-  border-radius: 8px;
-  background: #f7f6fb;
-  padding: 0.35rem 0.55rem;
+  min-height: 2.55rem;
+  border-radius: 10px;
+  background: #fff;
+  padding: 0.65rem 0.75rem;
+}
+
+.module-table-panel > .vilo-state {
+  padding-right: 0;
+  padding-left: 0;
+}
+
+.module-table-panel .cases-list-pagination {
+  padding: 0;
+}
+
+.module-list-card .case-action-cell {
+  width: 7rem;
+  text-align: center;
 }
 
 .client-detail-page h1 {
@@ -8842,11 +8883,6 @@ button {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .clients-header-row {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
   .invoice-page-top-row,
   .invoice-detail-top-row {
     flex-direction: column;
@@ -9463,6 +9499,10 @@ button {
   .task-detail-hero__head,
   .messages-create-modal__footer {
     flex-direction: column;
+  }
+
+  .module-page-header {
+    align-items: flex-start;
   }
 
   .task-detail-page__actions,
