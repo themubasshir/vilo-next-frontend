@@ -9124,15 +9124,78 @@ button {
 }
 
 .tasks-list-card {
-  padding-bottom: 0.25rem;
+  padding-bottom: 0;
+}
+
+.tasks-page-subtitle {
+  margin: 0.4rem 0 0;
+  color: #7a768f;
+  font-size: 0.92rem;
+}
+
+.tasks-filter-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(155px, 1fr));
+  gap: 0.65rem;
+  align-items: end;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid #eeebf5;
+}
+
+.tasks-filter-grid label {
+  display: grid;
+  min-width: 0;
+  gap: 0.3rem;
+  color: #69647b;
+  font-size: 0.78rem;
+}
+
+.tasks-filter-search {
+  grid-column: span 2;
+}
+
+.tasks-filter-grid input,
+.tasks-filter-grid select {
+  width: 100%;
+  min-width: 0;
+  min-height: 2.55rem;
+  border: 1px solid #e1deec;
+  border-radius: 10px;
+  background: #fff;
+  padding: 0.65rem 0.75rem;
+}
+
+.tasks-filter-grid > .vilo-btn {
+  min-height: 2.55rem;
+}
+
+.tasks-filter-grid :is(input, select, button):focus-visible {
+  outline: 3px solid rgba(79, 66, 240, 0.2);
+  outline-offset: 2px;
+}
+
+.tasks-context-notice {
+  padding: 0.65rem 1.25rem;
+  border-bottom: 1px solid #eeebf5;
+  background: #faf9fe;
+  color: #625d75;
+  font-size: 0.82rem;
+}
+
+.tasks-table-panel > .vilo-state {
+  padding-right: 0;
+  padding-left: 0;
 }
 
 .tasks-table-wrap {
+  max-width: 100%;
+  min-width: 0;
   overflow-x: auto;
   overflow-y: visible;
 }
 
 .tasks-table {
+  min-width: 820px;
   table-layout: fixed;
 }
 
@@ -9186,7 +9249,21 @@ button {
 }
 
 .tasks-table-row.is-completed {
-  opacity: 0.72;
+  background: #fbfafe;
+}
+
+.tasks-table-row.is-completed .tasks-table-title strong,
+.tasks-table-row.is-archived .tasks-table-title strong {
+  color: #6d6880;
+}
+
+.tasks-table-row.is-completed :is(.tasks-table-title span, .tasks-table-context span, .tasks-table-due span, .tasks-table-due small),
+.tasks-table-row.is-archived :is(.tasks-table-title span, .tasks-table-context span, .tasks-table-due span, .tasks-table-due small) {
+  color: #888397;
+}
+
+.tasks-table-row.is-archived {
+  background: #faf9fc;
 }
 
 .tasks-table-row.is-overdue {
@@ -9203,7 +9280,8 @@ button {
 
 .tasks-table-title strong,
 .task-detail-hero strong {
-  color: #4a465d;
+  color: #3f3b50;
+  font-weight: 700;
 }
 
 .tasks-table-title span,
@@ -9221,6 +9299,11 @@ button {
 .tasks-table-due span,
 .task-detail-grid strong {
   color: #4d4960;
+}
+
+.tasks-table-due__date.is-overdue {
+  color: #c53535;
+  font-weight: 600;
 }
 
 .tasks-status-stack {
@@ -9514,6 +9597,18 @@ button {
     padding-top: 0.25rem;
   }
 
+  .tasks-filter-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .tasks-filter-search {
+    grid-column: 1 / -1;
+  }
+
+  .tasks-table {
+    min-width: 620px;
+  }
+
   .task-detail-layout {
     width: 100%;
   }
@@ -9547,6 +9642,20 @@ button {
   .tasks-table th:nth-child(4),
   .tasks-table td:nth-child(4) {
     display: none;
+  }
+}
+
+@media (max-width: 520px) {
+  .tasks-filter-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .tasks-filter-search {
+    grid-column: auto;
+  }
+
+  .tasks-filter-grid > .vilo-btn {
+    width: 100%;
   }
 }
 
