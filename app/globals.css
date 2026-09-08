@@ -9820,3 +9820,10 @@ button {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.document-file-selection, .document-selection-list { min-width: 0; max-width: 100%; }
+.document-selection-list { display: grid; gap: 0.4rem; margin-top: 0.5rem; }
+.document-selection-row { display: flex; align-items: center; flex-wrap: wrap; gap: 0.5rem; min-width: 0; }
+.document-selection-row > span { flex: 1 1 10rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.document-selection-row > small { white-space: nowrap; }
+.document-file-selection .vilo-form-error { overflow-wrap: anywhere; }

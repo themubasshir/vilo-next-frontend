@@ -122,17 +122,28 @@ function ClientsPageContent() {
         .map((result, index) => result.status === "rejected" ? selectedIds[index].file.name : null)
         .filter(Boolean);
       const uploadedCount = selectedIds.length - failedFiles.length;
+      const clientDocuments = options.clientDocuments || [];
+      const documentResults = await Promise.allSettled(clientDocuments.map((file) => {
+        const data = new FormData();
+        data.append("file", file);
+        data.append("title", file.name.replace(/\.[^.]+$/, "").slice(0, 255) || "Client document");
+        data.append("client_id", String(created.id));
+        data.append("category", "client_records");
+        data.append("visibility", "internal");
+        return apiUpload("/api/v1/documents/upload", data);
+      }));
+      const failedDocuments = documentResults.flatMap((result, index) => result.status === "rejected" ? [clientDocuments[index].name] : []);
+
       setCreateOpen(false);
       setSelectedDraft(null);
       await load();
       setCreatedClientId(created.id);
-      if (!selectedIds.length) {
-        setSuccess("Client created successfully.");
-      } else if (!failedFiles.length) {
-        setSuccess(`Client created successfully. ${uploadedCount} ID ${uploadedCount === 1 ? "document" : "documents"} uploaded.`);
-      } else {
-        setSuccess(`Client created successfully. ${uploadedCount} of ${selectedIds.length} ID documents uploaded. ${failedFiles.join(", ")} could not be uploaded.`);
-      }
+      const results = ["Client created successfully."];
+      if (selectedIds.length) results.push(`${uploadedCount} of ${selectedIds.length} ID documents uploaded.`);
+      if (clientDocuments.length) results.push(`${clientDocuments.length - failedDocuments.length} of ${clientDocuments.length} Client documents uploaded.`);
+      if (failedFiles.length || failedDocuments.length) results.push(`Could not upload: ${[...failedFiles, ...failedDocuments].join(", ")}. Open Client Details to upload these files.`);
+      setSuccess(results.join(" "));
+
     } catch (err) {
       setError(err.message || "Failed to create client");
     } finally {
@@ -163,6 +174,7 @@ function ClientsPageContent() {
       setSuccess(pendingFilesNotSaved
         ? `Client intake saved as draft. ${pendingFilesNotSaved} selected ID ${pendingFilesNotSaved === 1 ? "file was" : "files were"} not saved and must be reselected when the draft is reopened.`
         : "Client intake saved as draft.");
+      if (options.clientDocuments?.length) setSuccess((message) => `${message} Selected Client Documents are not stored with the draft and must be reselected when the draft is reopened.`);
     } catch (err) {
       if (saved) setSelectedDraft({ ...saved, attachment: selectedDraft?.attachment || null });
       setError(err.message || "Client intake draft could not be saved.");

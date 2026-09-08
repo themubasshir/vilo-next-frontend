@@ -1,5 +1,6 @@
 "use client";
 
+import DocumentFileSelection from "../DocumentFileSelection";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { DiscardChangesDialog, useModalCloseGuard } from "../useModalCloseGuard";
 import { formatViloDateInput, toIsoDateFromViloInput } from "../../lib/dateFormat";
@@ -123,6 +124,7 @@ export default function ClientIntakeModal({
   const [form, setForm] = useState(initialState);
   const [initialForm, setInitialForm] = useState(initialState);
   const [selectedIds, setSelectedIds] = useState([]);
+  const [clientDocuments, setClientDocuments] = useState([]);
   const [fileErrors, setFileErrors] = useState([]);
   const [dragActive, setDragActive] = useState(false);
   const [errors, setErrors] = useState({});
@@ -135,6 +137,7 @@ export default function ClientIntakeModal({
     if (!open) return;
     setErrors({});
     setSelectedIds([]);
+    setClientDocuments([]);
     setFileErrors([]);
     setDragActive(false);
     dragDepthRef.current = 0;
@@ -147,8 +150,8 @@ export default function ClientIntakeModal({
 
   const title = useMemo(() => (mode === "edit" ? "Edit Client" : "Client Intake Form"), [mode]);
   const dirty = useMemo(
-    () => JSON.stringify(form) !== JSON.stringify(initialForm) || selectedIds.length > 0 || attachmentRemoved,
-    [attachmentRemoved, form, initialForm, selectedIds.length],
+    () => JSON.stringify(form) !== JSON.stringify(initialForm) || selectedIds.length > 0 || clientDocuments.length > 0 || attachmentRemoved,
+    [attachmentRemoved, form, initialForm, selectedIds.length, clientDocuments.length],
   );
   const closeGuard = useModalCloseGuard({ open, isDirty: dirty, isSubmitting: saving, onClose, onDiscard: onDiscardDraft });
 
@@ -183,7 +186,7 @@ export default function ClientIntakeModal({
     await onSubmit(
       payloadFromState(form, client),
       validatedIds.map(({ file, idType }) => ({ file, idType })),
-      { removeDraftAttachment: attachmentRemoved },
+      { removeDraftAttachment: attachmentRemoved, clientDocuments },
     );
   }
 
@@ -353,6 +356,13 @@ export default function ClientIntakeModal({
             {attachmentError ? <p className="vilo-state vilo-state--error">{attachmentError}</p> : null}
           </div> : null}
 
+          {mode === "create" ? <section className="client-upload-block" aria-label="Client Documents">
+            <h3>Client Documents</h3>
+            <p>Upload documents related to this Client. These are separate from identification documents.</p>
+            <DocumentFileSelection files={clientDocuments} onChange={setClientDocuments} disabled={saving} />
+            {clientDocuments.length > 0 && onSaveDraft ? <p role="note">Selected Client Documents are not stored with the draft and must be reselected when the draft is reopened.</p> : null}
+          </section> : null}
+
           <div>
             <label>Notes</label>
             <textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="Notes" />
@@ -372,7 +382,7 @@ export default function ClientIntakeModal({
         onKeepEditing={closeGuard.keepEditing}
         onDiscard={closeGuard.discard}
         onSaveDraft={mode === "create" && onSaveDraft ? async () => {
-          await onSaveDraft(form, selectedIds.map(({ file, idType }) => ({ file, idType })), { removeDraftAttachment: attachmentRemoved });
+          await onSaveDraft(form, selectedIds.map(({ file, idType }) => ({ file, idType })), { removeDraftAttachment: attachmentRemoved, clientDocuments });
           closeGuard.keepEditing();
         } : undefined}
         saving={saving}
