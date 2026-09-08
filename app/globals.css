@@ -9787,3 +9787,13 @@ button {
     min-height: 44px;
   }
 }
+
+/* Conversation-level unread state for the current participant. */
+.messages-conversation-item__top strong { font-weight: 500; overflow-wrap: anywhere; }
+.messages-conversation-item.is-unread .messages-conversation-item__top strong { font-weight: 750; }
+.messages-conversation-item.is-unread .messages-conversation-item__top strong::before {
+  content: ""; display: inline-block; width: 0.45rem; height: 0.45rem;
+  margin-right: 0.4rem; border-radius: 50%; background: #5d46f6;
+}
+.messages-conversation-item__bottom em { flex-shrink: 0; white-space: nowrap; padding: 0 0.4rem; }
+.reminder-popup > p { overflow-wrap: anywhere; }

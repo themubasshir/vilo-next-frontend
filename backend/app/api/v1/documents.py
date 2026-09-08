@@ -34,7 +34,7 @@ from app.services.audit import log_audit_event
 from app.services.document_storage import MAX_UPLOAD_BYTES, persist_file, resolve_stored_file, resolved_media_type, safe_original_name
 from app.services.email import build_document_shared_email
 from app.services.jobs import enqueue_email
-from app.services.notifications import create_notification
+from app.services.notifications import create_notification, notify_case_document_added
 from app.services.timeline import create_case_timeline_event
 from app.services.access import accessible_case_condition
 
@@ -425,6 +425,7 @@ async def upload_document(
             title=f"Document uploaded: {title}",
             metadata_json={"document_id": document.id, "file_name": original_name},
         )
+    await notify_case_document_added(db, document=document, actor_id=current_user.id)
     if visibility == "client_visible" and case is not None:
         client = await db.scalar(select(Client).where(Client.id == case.client_id, Client.organization_id == current_user.organization_id))
         if client and client.user_id:

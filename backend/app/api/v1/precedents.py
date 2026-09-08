@@ -38,6 +38,7 @@ from app.schemas.precedent import (
 from app.services.access import accessible_case_condition
 from app.services.audit import log_audit_event
 from app.services.document_storage import build_text_filename, persist_file, resolve_stored_file, resolved_media_type, safe_original_name
+from app.services.notifications import notify_case_document_added
 from app.services.timeline import create_case_timeline_event
 
 router = APIRouter(prefix="/precedents", tags=["precedents"])
@@ -528,6 +529,7 @@ async def copy_precedent_to_case(
     )
     db.add(document)
     await db.flush()
+    await notify_case_document_added(db, document=document, actor_id=current_user.id)
     await create_case_timeline_event(
         db,
         organization_id=current_user.organization_id,

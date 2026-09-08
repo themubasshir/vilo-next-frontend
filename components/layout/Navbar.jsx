@@ -69,10 +69,12 @@ export function Navbar({ onMenuClick, user, onLogout }) {
   useEffect(() => {
     loadNotifications();
     loadTimer();
+    window.addEventListener("vilo:notifications-read", loadNotifications);
     const notificationsId = window.setInterval(loadNotifications, 25000);
     const timerId = window.setInterval(loadTimer, 15000);
     const tickId = window.setInterval(() => setTick((value) => value + 1), 1000);
     return () => {
+      window.removeEventListener("vilo:notifications-read", loadNotifications);
       window.clearInterval(notificationsId);
       window.clearInterval(timerId);
       window.clearInterval(tickId);
@@ -139,7 +141,7 @@ export function Navbar({ onMenuClick, user, onLogout }) {
 
   async function markRead(id) {
     await apiRequest("/api/v1/notifications/mark-read", { method: "POST", body: JSON.stringify({ notification_ids: [id] }) });
-    loadNotifications();
+    window.dispatchEvent(new CustomEvent("vilo:notifications-read", { detail: { ids: [id] } }));
   }
 
   async function openNotification(item) {
@@ -229,7 +231,7 @@ export function Navbar({ onMenuClick, user, onLogout }) {
           </div>
         ) : null}
         <button type="button" className="dashboard-navbar__icon-button is-notification" aria-label="Notifications" aria-expanded={openMenu === "notifications"} onClick={() => toggleMenu("notifications")}><BellIcon />{unreadCount > 0 ? <span className="dashboard-navbar__alert-dot" aria-hidden="true" /> : null}</button>
-        {openMenu === "notifications" ? <div className="dashboard-navbar__notifications"><div className="dashboard-navbar__notifications-header"><strong>Notifications</strong><div><button type="button" onClick={() => apiRequest("/api/v1/notifications/mark-all-read", { method: "POST" }).then(loadNotifications)}>Mark all read</button><button type="button" className="dashboard-navbar__notifications-close" aria-label="Close notifications" onClick={() => setOpenMenu("")}>×</button></div></div><div className="dashboard-navbar__notifications-list">{items.length === 0 ? <p>No notifications yet.</p> : null}{items.map((item) => <button key={item.id} type="button" className="dashboard-navbar__notification-item" onClick={() => openNotification(item)}><div><strong>{item.title}</strong>{item.body ? <span>{item.body}</span> : null}<small>{formatViloDateTime(item.created_at)}</small></div>{!item.is_read ? <em>New</em> : null}</button>)}</div></div> : null}
+        {openMenu === "notifications" ? <div className="dashboard-navbar__notifications"><div className="dashboard-navbar__notifications-header"><strong>Notifications</strong><div><button type="button" onClick={() => apiRequest("/api/v1/notifications/mark-all-read", { method: "POST" }).then(() => window.dispatchEvent(new CustomEvent("vilo:notifications-read")))}>Mark all read</button><button type="button" className="dashboard-navbar__notifications-close" aria-label="Close notifications" onClick={() => setOpenMenu("")}>×</button></div></div><div className="dashboard-navbar__notifications-list">{items.length === 0 ? <p>No notifications yet.</p> : null}{items.map((item) => <button key={item.id} type="button" className="dashboard-navbar__notification-item" onClick={() => openNotification(item)}><div><strong>{item.title}</strong>{item.body ? <span>{item.body}</span> : null}<small>{formatViloDateTime(item.created_at)}</small></div>{!item.is_read ? <em>New</em> : null}</button>)}</div></div> : null}
         <button type="button" className="dashboard-navbar__avatar-button" aria-label="Profile Settings" onClick={() => router.push("/dashboard/settings")}><UserAvatar user={user} size="sm" /><span className="dashboard-navbar__online-dot" /></button>
         <button type="button" className="dashboard-navbar__identity dashboard-navbar__identity--button" onClick={() => router.push("/dashboard/settings")}><strong>{user?.name || "Loading..."}</strong><span>{user?.role || ""}</span></button>
         <button type="button" className="vilo-btn vilo-btn--secondary vilo-btn--xs" onClick={onLogout}>Logout</button>
@@ -239,7 +241,7 @@ export function Navbar({ onMenuClick, user, onLogout }) {
 }
 
 function formatElapsed(seconds) { const safe = Math.max(0, Number(seconds || 0)); const hours = String(Math.floor(safe / 3600)).padStart(2, "0"); const minutes = String(Math.floor((safe % 3600) / 60)).padStart(2, "0"); const secs = String(safe % 60).padStart(2, "0"); return `${hours}:${minutes}:${secs}`; }
-function resolveNotificationHref(item) { const meta = item?.metadata || {}; if (meta.link) return meta.link; if (meta.task_id) return `/dashboard/tasks/${meta.task_id}`; if (meta.calendar_event_id) return `/dashboard/calendar?event_id=${meta.calendar_event_id}`; if (meta.case_id) return `/dashboard/cases/${meta.case_id}`; if (meta.client_id) return `/dashboard/clients/${meta.client_id}`; return ""; }
+function resolveNotificationHref(item) { const meta = item?.metadata || {}; if (item.type === "message_received" && meta.conversation_id) return `/dashboard/messages?conversation=${encodeURIComponent(meta.conversation_id)}`; if (meta.link) return meta.link; if (meta.task_id) return `/dashboard/tasks/${meta.task_id}`; if (meta.calendar_event_id) return `/dashboard/calendar?event_id=${meta.calendar_event_id}`; if (meta.case_id) return `/dashboard/cases/${meta.case_id}`; if (meta.client_id) return `/dashboard/clients/${meta.client_id}`; return ""; }
 function IconBase({ children }) { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{children}</svg>; }
 function MenuIcon() { return <IconBase><path d="M4 7h16M4 12h16M4 17h16" /></IconBase>; }
 function SearchIcon() { return <IconBase><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></IconBase>; }

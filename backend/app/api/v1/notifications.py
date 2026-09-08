@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func, select, update
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
@@ -10,6 +10,8 @@ from app.models.notification import Notification
 from app.models.user import User
 from app.schemas.notification import MarkNotificationsReadRequest, NotificationListResponse, NotificationResponse, PopupDismissResponse, PopupReminderListResponse
 from app.services.reminders import REMINDER_TYPES, process_due_reminders
+
+POPUP_TYPES = (*REMINDER_TYPES, "message_received")
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
 
@@ -94,6 +96,30 @@ async def list_popup_reminders(
     return PopupReminderListResponse(items=[serialize_notification(row) for row in rows])
 
 
+@router.get("/popup-alerts", response_model=PopupReminderListResponse)
+async def list_popup_alerts(
+    limit: int = Query(default=10, ge=1, le=10),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    await process_due_reminders(db, deliver_emails=False)
+    rows = (
+        await db.scalars(
+            select(Notification)
+            .where(
+                Notification.organization_id == current_user.organization_id,
+                Notification.user_id == current_user.id,
+                Notification.type.in_(POPUP_TYPES),
+                or_(Notification.type != "message_received", Notification.is_read.is_(False)),
+                Notification.popup_dismissed_at.is_(None),
+            )
+            .order_by(Notification.created_at.asc())
+            .limit(limit)
+        )
+    ).all()
+    return PopupReminderListResponse(items=[serialize_notification(row) for row in rows])
+
+
 @router.post("/{notification_id}/dismiss-popup", response_model=PopupDismissResponse)
 async def dismiss_popup_reminder(
     notification_id: int,
@@ -105,7 +131,7 @@ async def dismiss_popup_reminder(
             Notification.id == notification_id,
             Notification.organization_id == current_user.organization_id,
             Notification.user_id == current_user.id,
-            Notification.type.in_(REMINDER_TYPES),
+            Notification.type.in_(POPUP_TYPES),
         )
     )
     if not notification:

@@ -16,7 +16,6 @@ from app.models.client import Client
 from app.models.expense import Expense
 from app.models.invoice import Invoice
 from app.models.invoice_payment import InvoicePayment
-from app.models.notification import Notification
 from app.models.task import Task
 from app.models.time_entry import TimeEntry
 from app.models.trust_ledger import TrustLedger
@@ -27,6 +26,7 @@ from app.schemas.billing import RevenueByStaffRow, TimeByStaffRow
 from app.schemas.dashboard import DashboardWidgetsResponse
 from app.services.billing import build_revenue_by_staff_report, build_time_by_staff_report
 from app.services.finance import derive_invoice_status, summarize_invoice_payment_method
+from app.services.message_unread import unread_messages_count as count_unread_messages
 from app.services.pdf import generate_report_pdf
 
 router = APIRouter(prefix="/reports", tags=["reports"])
@@ -124,13 +124,7 @@ async def dashboard_widgets(db: AsyncSession = Depends(get_db), current_user=Dep
                 Task.due_date < now,
             )
         )) or 0)
-        unread_messages_count = int((await db.scalar(
-            select(func.count(Notification.id)).where(
-                Notification.organization_id == org_id,
-                Notification.user_id == current_user.id,
-                Notification.is_read == False,
-            )
-        )) or 0)
+        unread_messages_count = await count_unread_messages(db, organization_id=org_id, user_id=current_user.id)
         priority_rows = (await db.execute(
             select(Task.id, Task.title, Task.priority, Task.due_date, Task.case_id)
             .where(*task_scope, Task.status.in_(OPEN_TASK_STATUSES))
@@ -255,13 +249,7 @@ async def dashboard_widgets(db: AsyncSession = Depends(get_db), current_user=Dep
             Task.due_date < now,
         )
     )) or 0)
-    unread_messages_count = int((await db.scalar(
-        select(func.count(Notification.id)).where(
-            Notification.organization_id == org_id,
-            Notification.user_id == current_user.id,
-            Notification.is_read == False,
-        )
-    )) or 0)
+    unread_messages_count = await count_unread_messages(db, organization_id=org_id, user_id=current_user.id)
     priority_rows = (await db.execute(
         select(Task.id, Task.title, Task.priority, Task.due_date, Task.case_id)
         .where(

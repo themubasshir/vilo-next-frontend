@@ -29,6 +29,7 @@ from app.models.organization import Organization
 from app.models.practice_area import PracticeArea
 from app.models.precedent import Precedent
 from app.models.user import User
+from app.models.notification import Notification
 from app.services import document_storage
 
 
@@ -49,9 +50,9 @@ async def workflow(tmp_path, monkeypatch):
         connection.execute("PRAGMA foreign_keys=ON")
 
     models = [Organization, User, Client, Case, CaseAssignment, ClientAssignment,
-              Precedent, PracticeArea, Document, DocumentVersion, AuditLog, CaseTimelineEvent]
+              Precedent, PracticeArea, Document, DocumentVersion, AuditLog, CaseTimelineEvent, Notification]
     # SQLite test representation only; production JSONB schema is unchanged.
-    for model in (AuditLog, CaseTimelineEvent):
+    for model in (AuditLog, CaseTimelineEvent, Notification):
         monkeypatch.setattr(model.__table__.c.metadata, "type", JSON())
     # The ORM declares the audit organization index twice; migrations already
     # create it once. Deduplicate only this temporary test database's DDL.
@@ -118,6 +119,9 @@ async def create_precedent(client, kind="text"):
 @pytest.mark.parametrize("kind", ["docx", "text"])
 async def test_copy_download_edit_callback_and_versions(workflow, monkeypatch, kind):
     client, sessions, _actor = workflow
+    async with sessions() as db:
+        db.add(CaseAssignment(case_id=1, user_id=3))
+        await db.commit()
     precedent_id, text, original = await create_precedent(client, kind)
     if kind == "docx":
         async with sessions() as db:
@@ -197,6 +201,9 @@ async def test_copy_download_edit_callback_and_versions(workflow, monkeypatch, k
         assert row.file_size == len(edited)
         assert len((await db.scalars(select(AuditLog).where(AuditLog.action == "precedent_copied_to_case"))).all()) == 1
         assert len((await db.scalars(select(CaseTimelineEvent).where(CaseTimelineEvent.event_type == "precedent_copied"))).all()) == 1
+        alerts = (await db.scalars(select(Notification))).all()
+        assert len(alerts) == 1 and alerts[0].user_id == 3
+        assert alerts[0].metadata_json["document_id"] == document_id
 
 
 @pytest.mark.asyncio

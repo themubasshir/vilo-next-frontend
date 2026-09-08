@@ -1,5 +1,11 @@
 from datetime import datetime, timezone
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.case import Case, CaseAssignment
+from app.models.document import Document
+from app.models.enums import UserRole
+from app.models.user import User
 
 from app.models.notification import Notification
 
@@ -65,3 +71,36 @@ async def bulk_create_notifications(
         notifications.append(notification)
     await db.flush()
     return notifications
+
+
+async def notify_case_document_added(db: AsyncSession, *, document: Document, actor_id: int) -> None:
+    """Notify only assigned, same-firm paralegals for a newly created File document."""
+    if document.case_id is None:
+        return
+    case = await db.scalar(select(Case).where(
+        Case.id == document.case_id, Case.organization_id == document.organization_id,
+    ))
+    if case is None:
+        return
+    recipients = (await db.scalars(
+        select(User.id).join(CaseAssignment, CaseAssignment.user_id == User.id).where(
+            CaseAssignment.case_id == case.id,
+            User.organization_id == document.organization_id,
+            User.role == UserRole.paralegal,
+            User.id != actor_id,
+        ).distinct()
+    )).all()
+    for user_id in recipients:
+        key = f"document_uploaded:{document.id}:user:{user_id}"
+        existing = await db.scalar(select(Notification.id).where(
+            Notification.organization_id == document.organization_id,
+            Notification.user_id == user_id, Notification.dedupe_key == key,
+        ))
+        if existing is None:
+            await create_notification(
+                db, organization_id=document.organization_id, user_id=user_id,
+                type="document_uploaded", title=f"New document in {case.title}"[:255],
+                body=document.title, dedupe_key=key,
+                metadata_json={"document_id": document.id, "case_id": case.id,
+                               "link": f"/dashboard/cases/{case.id}?tab=documents"},
+            )

@@ -414,7 +414,8 @@ async def create_message(conversation_id: int, payload: MessageCreate, db: Async
     conv.updated_at = now
     participant_ids = (
         await db.scalars(
-            select(ConversationParticipant.user_id).where(
+            select(ConversationParticipant.user_id).join(User, User.id == ConversationParticipant.user_id).where(
+                User.organization_id == current_user.organization_id,
                 ConversationParticipant.organization_id == current_user.organization_id,
                 ConversationParticipant.conversation_id == conversation_id,
                 ConversationParticipant.user_id != current_user.id,
@@ -426,9 +427,9 @@ async def create_message(conversation_id: int, payload: MessageCreate, db: Async
         organization_id=current_user.organization_id,
         user_ids=list(participant_ids),
         type="message_received",
-        title=f"New message in {conv.title or 'conversation'}",
+        title=f"New message in {conv.title or 'conversation'}"[:255],
         body=current_user.name,
-        metadata_json={"conversation_id": conversation_id, "message_id": msg.id},
+        metadata_json={"conversation_id": conversation_id, "message_id": msg.id, "conversation_title": conv.title},
     )
     await db.commit()
     await db.refresh(msg)
@@ -481,9 +482,18 @@ async def delete_message(message_id: int, db: AsyncSession = Depends(get_db), cu
 
 
 @router.post("/{conversation_id}/mark-read")
-async def mark_conversation_read(conversation_id: int, db: AsyncSession = Depends(get_db), current_user: User = Depends(role_guard(ALLOWED_STAFF))):
+async def mark_conversation_read(conversation_id: int, read_through: datetime | None = Query(default=None), db: AsyncSession = Depends(get_db), current_user: User = Depends(role_guard(ALLOWED_STAFF))):
     part = await require_participant(db, current_user.organization_id, conversation_id, current_user.id)
-    part.last_read_at = datetime.now(timezone.utc)
+    now = datetime.now(timezone.utc)
+    # Optional fetch boundary avoids acknowledging messages arriving after a thread load.
+    cutoff = read_through or now
+    if cutoff.tzinfo is None:
+        cutoff = cutoff.replace(tzinfo=timezone.utc)
+    cutoff = min(cutoff, now)
+    previous = part.last_read_at
+    if previous and previous.tzinfo is None:
+        previous = previous.replace(tzinfo=timezone.utc)
+    part.last_read_at = max(previous, cutoff) if previous else cutoff
     await db.commit()
     return {"ok": True}
 

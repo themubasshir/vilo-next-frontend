@@ -65,7 +65,7 @@ export default function DashboardPage() {
   const todaysStats = [
     { label: "Due Today", value: Math.max(0, Number(today?.due_today_count ?? 12)), href: "/dashboard/tasks?filter=due_today" },
     { label: "Overdue", value: Math.max(0, Number(today?.overdue_count ?? 4)), href: "/dashboard/tasks?filter=overdue" },
-    { label: "Messages", value: Math.max(0, Number(today?.unread_messages_count ?? 9)), href: "/dashboard/messages" },
+    { label: "New Messages", value: Math.max(0, Number(today?.unread_messages_count ?? 0)), href: "/dashboard/messages?filter=unread" },
   ];
 
   const timelineRows = (today?.priority_timeline || []).slice(0, 3).map((task) => ({

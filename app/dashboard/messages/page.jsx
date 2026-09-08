@@ -142,6 +142,15 @@ function MessagesPageContent() {
   const searchParams = useSearchParams();
   const threadEndRef = useRef(null);
   const firstMessageRef = useRef(null);
+  const selectedRef = useRef(null);
+  const threadVisible = useRef(true);
+  const threadRequests = useRef(new Map());
+  const summaryRequest = useRef(null);
+  const pollInFlight = useRef(false);
+  const handledConversation = useRef(null);
+  const loadedThread = useRef(null);
+  const localRoute = useRef(null);
+  const readThrough = useRef(new Map());
 
   const [conversations, setConversations] = useState([]);
   const [cases, setCases] = useState([]);
@@ -177,6 +186,9 @@ function MessagesPageContent() {
   const [sendError, setSendError] = useState("");
   const [createError, setCreateError] = useState("");
   const [meId, setMeId] = useState(null);
+
+  selectedRef.current = selected;
+  threadVisible.current = !showCreateModal && !showCasePicker;
 
   const requestedClientId = Number(searchParams.get("client_id") || 0);
 
@@ -235,35 +247,63 @@ function MessagesPageContent() {
   }
 
   async function loadConversations(targetConversationId = null) {
-    const rows = await apiRequest("/api/v1/conversations");
-    setConversations(rows || []);
+    if (!summaryRequest.current) {
+      summaryRequest.current = apiRequest("/api/v1/conversations").finally(() => { summaryRequest.current = null; });
+    }
+    const rows = await summaryRequest.current;
+    const summaries = (rows || []).map((conv) => {
+      const cutoff = readThrough.current.get(conv.id);
+      return cutoff && conv.latest_message && new Date(conv.latest_message.created_at) <= new Date(cutoff) ? { ...conv, unread_count: 0 } : conv;
+    });
+    setConversations(summaries);
     setSelected((prev) => {
       if (targetConversationId) {
-        const direct = (rows || []).find((row) => Number(row.id) === Number(targetConversationId));
+        const direct = summaries.find((row) => Number(row.id) === Number(targetConversationId));
         if (direct) return direct;
       }
       if (prev) {
-        const next = (rows || []).find((row) => row.id === prev.id);
-        return next || ((rows || [])[0] || null);
+        const next = summaries.find((row) => row.id === prev.id);
+        return next || null;
       }
-      return (rows || [])[0] || null;
+      const requested = Number(searchParams.get("conversation") || 0);
+      if (requested) return summaries.find((row) => Number(row.id) === requested) || null;
+      return searchParams.get("filter") === "unread" ? null : summaries[0] || null;
     });
+    return summaries;
   }
 
-  async function loadMessages(conversationId) {
-    setMessagesLoading(true);
-    try {
-      const rows = await apiRequest(`/api/v1/conversations/${conversationId}/messages`);
-      setMessages(rows || []);
-      await apiRequest(`/api/v1/conversations/${conversationId}/mark-read`, { method: "POST" });
-    } finally {
-      setMessagesLoading(false);
-    }
+  async function loadMessages(conversationId, background = false) {
+    if (threadRequests.current.has(conversationId)) return threadRequests.current.get(conversationId);
+    if (!background) setMessagesLoading(true);
+    const request = (async () => {
+      try {
+        const rows = await apiRequest(`/api/v1/conversations/${conversationId}/messages`);
+        if (selectedRef.current?.id !== conversationId) return;
+        setMessages((previous) => JSON.stringify(previous) === JSON.stringify(rows || []) ? previous : rows || []);
+        if (document.visibilityState !== "visible" || !threadVisible.current) return;
+        // Only acknowledge messages actually fetched, leaving later arrivals unread.
+        const latest = rows?.[rows.length - 1];
+        if (latest) {
+          await apiRequest(`/api/v1/conversations/${conversationId}/mark-read?read_through=${encodeURIComponent(latest.created_at)}`, { method: "POST" });
+        }
+        if (selectedRef.current?.id !== conversationId) return;
+        if (latest) readThrough.current.set(conversationId, latest.created_at);
+        const acknowledge = (conv) => conv?.id === conversationId && (!conv.latest_message || (latest && new Date(conv.latest_message.created_at) <= new Date(latest.created_at))) ? { ...conv, unread_count: 0 } : conv;
+        setConversations((current) => current.map(acknowledge));
+        setSelected(acknowledge);
+        loadedThread.current = { id: conversationId, updated_at: selectedRef.current?.updated_at, latest_id: latest?.id };
+      } finally {
+        threadRequests.current.delete(conversationId);
+        if (selectedRef.current?.id === conversationId) setMessagesLoading(false);
+      }
+    })();
+    threadRequests.current.set(conversationId, request);
+    return request;
   }
 
   async function loadParticipants(conversationId) {
     const rows = await apiRequest(`/api/v1/conversations/${conversationId}/participants`);
-    setThreadParticipants(rows || []);
+    if (selectedRef.current?.id === conversationId) setThreadParticipants(rows || []);
   }
 
   async function init() {
@@ -316,12 +356,45 @@ function MessagesPageContent() {
 
   useEffect(() => {
     const conversationId = Number(searchParams.get("conversation") || 0);
-    if (!conversationId || !conversations.length) return;
+    if (!conversationId) { handledConversation.current = null; return; }
+    if (handledConversation.current === conversationId || !conversations.length) return;
     const target = conversations.find((row) => Number(row.id) === conversationId);
     if (target) {
+      handledConversation.current = conversationId;
       setSelected((prev) => (prev?.id === target.id ? prev : target));
     }
   }, [conversations, searchParams]);
+
+  useEffect(() => {
+    if (localRoute.current === searchParams.toString()) return;
+    setFilter(searchParams.get("conversation") ? "all" : searchParams.get("filter") === "unread" ? "unread" : "all");
+  }, [searchParams]);
+
+  useEffect(() => {
+    if (loading) return;
+    let stopped = false;
+    const refresh = async (forceThread = false) => {
+      if (stopped || pollInFlight.current || document.visibilityState !== "visible") return;
+      pollInFlight.current = true;
+      try {
+        const rows = await loadConversations();
+        if (stopped) return;
+        const active = rows.find((row) => row.id === selectedRef.current?.id);
+        const loaded = loadedThread.current;
+        if (active && threadVisible.current && (forceThread || active.unread_count > 0 || loaded?.id !== active.id || loaded?.updated_at !== active.updated_at || loaded?.latest_id !== active.latest_message?.id)) {
+          await loadMessages(active.id, true);
+        }
+      } catch (err) {
+        if (!stopped) setError(err.message || "Messages could not be refreshed");
+      } finally {
+        pollInFlight.current = false;
+      }
+    };
+    const interval = window.setInterval(() => refresh(), 25_000);
+    const onVisible = () => { if (document.visibilityState === "visible") refresh(true); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => { stopped = true; window.clearInterval(interval); document.removeEventListener("visibilitychange", onVisible); };
+  }, [loading]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!selected?.id) return;
@@ -390,10 +463,12 @@ function MessagesPageContent() {
       else params.set(key, String(value));
     });
     const next = params.toString();
+    localRoute.current = next;
     router.replace(next ? `${pathname}?${next}` : pathname);
   }
 
   function openConversation(conv) {
+    selectedRef.current = conv;
     setSelected(conv);
     updateRoute({ conversation: conv.id, create: null });
   }
@@ -569,14 +644,14 @@ function MessagesPageContent() {
             <div className="messages-sidebar__list">
               {!filteredConversations.length ? (
                 <div className="messages-empty-state">
-                  <strong>{query.trim() ? "No results" : "No conversations"}</strong>
-                  <span>{query.trim() ? "Try another search term." : "Start a new thread to begin messaging."}</span>
+                  <strong>{query.trim() ? "No results" : filter === "unread" ? "No unread messages." : "No conversations"}</strong>
+                  <span>{query.trim() ? "Try another search term." : filter === "unread" ? "You’re all caught up." : "Start a new thread to begin messaging."}</span>
                 </div>
               ) : null}
               {filteredConversations.map((conv) => {
                 const active = selected?.id === conv.id;
                 return (
-                  <button key={conv.id} type="button" className={`messages-conversation-item${active ? " is-active" : ""}`} onClick={() => openConversation(conv)}>
+                  <button key={conv.id} type="button" className={`messages-conversation-item${active ? " is-active" : ""}${conv.unread_count > 0 ? " is-unread" : ""}`} aria-label={`${conversationLabel(conv)}, ${conv.unread_count > 0 ? `${conv.unread_count} unread messages` : "Read"}`} onClick={() => openConversation(conv)}>
                     <span className="messages-conversation-item__avatar">{getInitials(conversationLabel(conv))}</span>
                     <span className="messages-conversation-item__main">
                       <span className="messages-conversation-item__top">
@@ -588,7 +663,7 @@ function MessagesPageContent() {
                       </span>
                       <span className="messages-conversation-item__bottom">
                         <span className="messages-conversation-item__preview">{conv.latest_message?.body || "No messages yet"}</span>
-                        {conv.unread_count > 0 ? <em>{conv.unread_count}</em> : null}
+                        {conv.unread_count > 0 ? <em>{conv.unread_count} new</em> : null}
                       </span>
                     </span>
                   </button>
