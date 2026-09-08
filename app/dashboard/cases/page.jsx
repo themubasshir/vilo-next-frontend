@@ -1,5 +1,7 @@
 "use client";
 
+import AssignedParalegals from "../../../components/dashboard/AssignedParalegals";
+
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useRef, useState } from "react";
@@ -334,7 +336,8 @@ function CasesPageContent() {
               </div>
               <div><label>Expected Completion Date</label><input type="date" value={form.expected_completion_date} onChange={(e) => setForm({ ...form, expected_completion_date: e.target.value })} /></div>
               <div className="vilo-checkbox-grid">
-                <div className="case-assign-heading"><p>Assign Users</p></div>
+                <div className="case-assign-heading"><p>Assign Team Members</p></div>
+                <p className="case-assigned-empty">Team members can access this file without a separate client assignment.</p>
                 <select value="" onChange={(e) => { if (e.target.value) toggleUser(Number(e.target.value)); }}><option value="">Select team member</option>{team.filter((user) => !form.assigned_user_ids.includes(user.id)).map((user) => <option key={user.id} value={user.id}>{user.name} ({user.role})</option>)}</select>
                 <div className="case-assigned-list">{form.assigned_user_ids.length ? form.assigned_user_ids.map((userId) => { const member = team.find((u) => u.id === userId); return member ? <span key={userId} className="case-assigned-pill">{member.name} ({member.role})<button type="button" onClick={() => toggleUser(userId)} aria-label={`Remove ${member.name}`}>×</button></span> : null; }) : <span className="case-assigned-empty">No team members selected.</span>}</div>
               </div>
@@ -381,7 +384,8 @@ function CasesPageContent() {
                   <th className="case-title-cell">Title</th>
                   <th className="case-badge-cell">Status</th>
                   <th className="case-badge-cell">Priority</th>
-                  <th>Client</th>
+                  <th className="case-client-cell">Client</th>
+                  <th className="case-paralegal-cell">Paralegal(s)</th>
                   <th className="case-action-cell">Actions</th>
                 </tr>
               </thead>
@@ -391,7 +395,8 @@ function CasesPageContent() {
                     <td className="case-title-cell"><Link href={`/dashboard/cases/${c.id}`} className="cases-title-link">{c.title || "Untitled draft"}</Link></td>
                     <td className="case-badge-cell"><span className={`vilo-badge vilo-badge--${c.status}`}>{c.status}</span></td>
                     <td className="case-badge-cell"><span className={`vilo-badge vilo-badge--priority-${c.priority}`}>{c.priority}</span></td>
-                    <td>{c.client_name || `#${c.client_id}`}</td>
+                    <td className="case-client-cell">{c.client_name || `#${c.client_id}`}</td>
+                    <td className="case-paralegal-cell"><AssignedParalegals users={c.assigned_users} /></td>
                     <td className="case-action-cell" onClick={(e) => e.stopPropagation()}>
                       <div className="vilo-table-actions case-row-actions">
                         <button

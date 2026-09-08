@@ -11,7 +11,7 @@ from app.db.base import Base
 from app.models.calendar_event import CalendarEvent
 from app.models.task import Task
 from app.models.case import CaseAssignment
-from app.models.client import Client
+from app.models.client import Client, ClientAssignment
 from app.models.conversation import Conversation, ConversationParticipant, Message
 from app.models.document import Document
 from app.models.enums import UserRole
@@ -170,6 +170,7 @@ async def test_file_upload_recipients_metadata_dedupe_and_replace(messaging, rol
     doc = response.json()
     async with sessions() as db:
         rows = (await db.scalars(select(Notification))).all()
+        assert (await db.scalars(select(ClientAssignment))).all() == []
         assert len(rows) == 1 and rows[0].user_id == 3 and rows[0].organization_id == 1
         assert rows[0].type == 'document_uploaded' and rows[0].title == 'New document in File 1' and rows[0].body == 'Evidence'
         assert rows[0].metadata_json == {'document_id': doc['id'], 'case_id': 1, 'link': '/dashboard/cases/1?tab=documents'}

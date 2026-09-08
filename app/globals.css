@@ -4471,7 +4471,8 @@ button {
 }
 
 .case-table-wrap--menu-visible {
-  overflow: visible;
+  overflow-x: auto;
+  padding-bottom: 10rem;
 }
 
 .case-table-wrap .team-table {
@@ -4479,7 +4480,7 @@ button {
 }
 
 .case-list-table {
-  min-width: 780px;
+  min-width: 1060px;
   table-layout: fixed;
 }
 
@@ -4490,7 +4491,7 @@ button {
 }
 
 .case-list-table .case-title-cell {
-  width: 42%;
+  width: auto;
   min-width: 18rem;
 }
 
@@ -9797,3 +9798,25 @@ button {
 }
 .messages-conversation-item__bottom em { flex-shrink: 0; white-space: nowrap; padding: 0 0.4rem; }
 .reminder-popup > p { overflow-wrap: anywhere; }
+
+.case-list-table .case-client-cell {
+  width: 11rem;
+  overflow-wrap: anywhere;
+}
+
+.case-list-table .case-paralegal-cell {
+  width: 12rem;
+}
+
+.case-paralegals {
+  display: grid;
+  gap: 0.15rem;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.case-paralegals > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
