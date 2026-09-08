@@ -4,7 +4,9 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { apiDownload, apiRequest, apiUpload } from "../../../../lib/api";
-import { getToken } from "../../../../lib/auth";
+import OnlyOfficeDocumentModal from "../../../../components/OnlyOfficeDocumentModal";
+import ProtectedFilePreviewModal, { useProtectedFilePreview } from "../../../../components/ProtectedFilePreviewModal";
+import { getDocumentViewerType } from "../../../../lib/documentViewer";
 import { formatViloDate, formatViloDateTime } from "../../../../lib/dateFormat";
 
 const TABS = ["timeline", "notes", "tasks", "documents", "team"];
@@ -67,6 +69,8 @@ export default function CaseDetailPage() {
   const [team, setTeam] = useState([]);
   const [tasks, setTasks] = useState([]);
   const [documents, setDocuments] = useState([]);
+  const [wordTarget, setWordTarget] = useState(null);
+  const { preview, openPreview, closePreview } = useProtectedFilePreview();
   const [notes, setNotes] = useState([]);
   const [timeline, setTimeline] = useState([]);
   const [invoices, setInvoices] = useState([]);
@@ -134,6 +138,9 @@ export default function CaseDetailPage() {
   }
 
   useEffect(() => { load(); }, [id]);
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("tab") === "documents") setActiveTab("documents");
+  }, [id]);
 
   function openModal(type, row = null) {
     setModalType(type);
@@ -369,25 +376,27 @@ export default function CaseDetailPage() {
     }
   }
 
-  function downloadDocument(documentId) {
-    const token = getToken();
-    const base = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
-    fetch(`${base}/api/v1/documents/${documentId}/download`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    })
-      .then(async (r) => {
-        if (!r.ok) throw new Error("Download failed");
-        const blob = await r.blob();
-        const href = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = href;
-        a.download = "document";
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        URL.revokeObjectURL(href);
-      })
-      .catch((err) => setError(err.message));
+  async function downloadDocument(documentId) {
+    try {
+      await apiDownload(`/api/v1/documents/${documentId}/download`);
+    } catch (err) {
+      setError(err.message || "Download failed");
+    }
+  }
+
+  function viewDocument(doc) {
+    const viewerType = getDocumentViewerType({ filename: doc.file_name, mediaType: doc.file_type });
+    if (viewerType === "onlyoffice") {
+      setWordTarget({ document: doc, mode: "view" });
+      return;
+    }
+    void openPreview({ path: `/api/v1/documents/${doc.id}/view`, downloadPath: `/api/v1/documents/${doc.id}/download`, filename: doc.file_name, expectedType: viewerType });
+  }
+
+  async function closeWordDocument() {
+    const edited = wordTarget?.mode === "edit";
+    setWordTarget(null);
+    if (edited) await load();
   }
 
   const timelineRows = useMemo(() => timeline.map((entry, index) => ({
@@ -612,8 +621,12 @@ export default function CaseDetailPage() {
                             <td><span className={`vilo-badge ${doc.visibility === "client_visible" ? "vilo-badge--active" : "vilo-badge--draft"}`}>{doc.visibility}</span></td>
                             <td>
                               <div className="vilo-table-actions">
+                                <button type="button" className="vilo-btn vilo-btn--ghost vilo-btn--xs" onClick={() => viewDocument(doc)}>View</button>
+                                {getDocumentViewerType({ filename: doc.file_name, mediaType: doc.file_type }) === "onlyoffice" ? (
+                                  <button type="button" className="vilo-btn vilo-btn--ghost vilo-btn--xs" onClick={() => setWordTarget({ document: doc, mode: "edit" })}>Edit in Word</button>
+                                ) : null}
                                 <button type="button" className="vilo-btn vilo-btn--secondary vilo-btn--xs" onClick={() => downloadDocument(doc.id)}>Download</button>
-                                <button type="button" className="vilo-btn vilo-btn--ghost vilo-btn--xs" onClick={() => { setSelectedDocument(doc); setModalType("replace-document"); }}>Edit / Replace</button>
+                                <button type="button" className="vilo-btn vilo-btn--ghost vilo-btn--xs" onClick={() => { setSelectedDocument(doc); setModalType("replace-document"); }}>Replace File</button>
                                 <button type="button" className="vilo-btn vilo-btn--ghost vilo-btn--xs" onClick={() => openVersionHistory(doc)}>Versions</button>
                               </div>
                             </td>
@@ -895,6 +908,8 @@ export default function CaseDetailPage() {
           ) : null}
         </Modal>
       ) : null}
+      <ProtectedFilePreviewModal preview={preview} onClose={closePreview} />
+      {wordTarget ? <OnlyOfficeDocumentModal document={wordTarget.document} mode={wordTarget.mode} downloadPath={`/api/v1/documents/${wordTarget.document.id}/download`} onClose={closeWordDocument} /> : null}
     </section>
   );
 }

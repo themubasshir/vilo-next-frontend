@@ -55,9 +55,9 @@ class PrecedentListResponse(BaseModel):
 
 
 class PrecedentCopyToCaseRequest(BaseModel):
+    # Legacy content_text extras are ignored: editing happens on the copy.
     case_id: int
     name: str | None = None
-    content_text: str | None = None
 
 
 class PrecedentCopyToCaseResponse(BaseModel):

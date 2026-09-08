@@ -1,16 +1,23 @@
 import json
 from datetime import date, datetime, timezone
+from io import BytesIO
 from pathlib import Path
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile, status
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from sqlalchemy import or_, select, func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api.deps import role_guard
-from app.api.v1.documents import STORAGE_ROOT as DOCUMENT_STORAGE_ROOT, to_response as document_to_response
+from app.api.v1.documents import (
+    DOCX_MIME_TYPE,
+    STORAGE_ROOT as DOCUMENT_STORAGE_ROOT,
+    render_docx_bytes,
+    to_response as document_to_response,
+)
 from app.db.session import get_db
 from app.models.case import Case
 from app.models.document import Document
@@ -28,6 +35,7 @@ from app.schemas.precedent import (
     PracticeAreaCreate,
     PracticeAreaResponse,
 )
+from app.services.access import accessible_case_condition
 from app.services.audit import log_audit_event
 from app.services.document_storage import build_text_filename, persist_file, resolve_stored_file, resolved_media_type, safe_original_name
 from app.services.timeline import create_case_timeline_event
@@ -105,32 +113,37 @@ async def get_precedent_or_404(db: AsyncSession, precedent_id: int, organization
     return precedent
 
 
-async def get_case_or_404(db: AsyncSession, case_id: int, organization_id: int) -> Case:
-    case = await db.scalar(select(Case).where(Case.id == case_id, Case.organization_id == organization_id))
+async def get_case_or_404(db: AsyncSession, case_id: int, current_user: User) -> Case:
+    case = await db.scalar(select(Case).where(
+        Case.id == case_id,
+        Case.organization_id == current_user.organization_id,
+        accessible_case_condition(current_user),
+    ))
     if not case:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Case not found")
     return case
 
 
-def build_copy_payload(precedent: Precedent, requested_name: str | None, override_text: str | None) -> tuple[str, bytes, str | None]:
-    title = (requested_name or precedent.name or precedent.file_name or "Precedent Copy").strip()
-    if override_text is not None:
-        file_name = build_text_filename(title)
-        return title, override_text.encode("utf-8"), "text/plain"
+def build_copy_payload(precedent: Precedent, requested_name: str | None) -> tuple[str, bytes, str]:
+    title = (requested_name or precedent.name or precedent.file_name or "Precedent Copy").strip() or "Precedent Copy"
+    if precedent.file_path:
+        source_path = resolve_stored_file(precedent.file_path, PRECEDENT_STORAGE_ROOT)
+        data = source_path.read_bytes()
+        file_name = precedent.file_name or source_path.name
+        if file_name.lower().endswith(".docx"):
+            from docx import Document as DocxDocument
 
-    if precedent.file_path and precedent.file_name:
-        # Copy-to-case predates the shared serving helper. Keep the exact
-        # existing storage reference semantics here; view/download still use
-        # the constrained resolver and the copied destination is generated
-        # inside DOCUMENT_STORAGE_ROOT.
-        source_path = Path(precedent.file_path)
-        if not source_path.is_file():
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Stored precedent file not found")
-        return title, source_path.read_bytes(), precedent.file_type
+            try:
+                DocxDocument(BytesIO(data))
+            except Exception as exc:
+                raise HTTPException(status_code=400, detail="Stored precedent is not a valid Word document") from exc
+        return title, data, resolved_media_type(file_name, precedent.file_type)
 
     if precedent.content_text:
-        file_name = build_text_filename(title)
-        return title, precedent.content_text.encode("utf-8"), "text/plain"
+        try:
+            return title, render_docx_bytes(precedent.content_text), DOCX_MIME_TYPE
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="Precedent text contains characters unsupported by Word") from exc
 
     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Precedent has no file or text content to copy")
 
@@ -181,12 +194,10 @@ async def create_practice_area(
     return PracticeAreaResponse(id=row.id, name=row.name)
 
 
-def build_copy_filename(precedent: Precedent, title: str, override_text: str | None) -> str:
-    if override_text is not None:
-        return build_text_filename(title)
-    if precedent.file_name:
-        return safe_original_name(precedent.file_name)
-    return build_text_filename(title)
+def build_copy_filename(precedent: Precedent, title: str) -> str:
+    if precedent.file_path:
+        return safe_original_name(precedent.file_name or resolve_stored_file(precedent.file_path, PRECEDENT_STORAGE_ROOT).name)
+    return str(Path(build_text_filename(title)).with_suffix(".docx"))
 
 
 @router.get("", response_model=PrecedentListResponse)
@@ -397,10 +408,13 @@ async def download_precedent(
     current_user: User = Depends(role_guard(VIEW_ROLES)),
 ):
     precedent = await get_precedent_or_404(db, precedent_id, current_user.organization_id)
-    if not precedent.file_path or not precedent.file_name:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Precedent file not found")
+    if not precedent.file_path:
+        title, data, media_type = build_copy_payload(precedent, None)
+        filename = build_copy_filename(precedent, title)
+        return Response(content=data, media_type=media_type, headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}"})
     path = resolve_stored_file(precedent.file_path, PRECEDENT_STORAGE_ROOT)
-    return FileResponse(path=str(path), filename=precedent.file_name, media_type=resolved_media_type(precedent.file_name, precedent.file_type))
+    filename = safe_original_name(precedent.file_name or path.name)
+    return FileResponse(path=str(path), filename=filename, media_type=resolved_media_type(filename, precedent.file_type))
 
 
 @router.get("/{precedent_id}/view")
@@ -487,10 +501,10 @@ async def copy_precedent_to_case(
     current_user: User = Depends(role_guard(VIEW_ROLES)),
 ):
     precedent = await get_precedent_or_404(db, precedent_id, current_user.organization_id)
-    case = await get_case_or_404(db, payload.case_id, current_user.organization_id)
+    case = await get_case_or_404(db, payload.case_id, current_user)
 
-    title, data, file_type = build_copy_payload(precedent, payload.name, payload.content_text)
-    file_name = build_copy_filename(precedent, title, payload.content_text)
+    title, data, file_type = build_copy_payload(precedent, payload.name)
+    file_name = build_copy_filename(precedent, title)
     file_path, _stored_name = persist_file(DOCUMENT_STORAGE_ROOT, current_user.organization_id, file_name, data)
     now = datetime.now(timezone.utc)
 
@@ -538,7 +552,7 @@ async def copy_precedent_to_case(
     await db.commit()
     await db.refresh(document)
     return PrecedentCopyToCaseResponse(
-        precedent_id=precedent.id,
-        case_id=case.id,
+        precedent_id=document.source_precedent_id,
+        case_id=document.case_id,
         document=document_to_response(document),
     )

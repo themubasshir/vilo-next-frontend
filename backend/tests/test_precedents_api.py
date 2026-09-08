@@ -457,6 +457,7 @@ def test_cross_org_precedent_file_preview_is_non_disclosing_404():
 def test_authorized_staff_can_copy_precedent_to_case(monkeypatch):
     with TemporaryDirectory() as tmpdir:
         source_path = Path(tmpdir) / "source.pdf"
+        monkeypatch.setattr(precedents_module, "PRECEDENT_STORAGE_ROOT", Path(tmpdir))
         source_path.write_bytes(b"MASTER_BINARY")
         precedent = _precedent_obj(precedent_id=9, file_path=str(source_path), file_name="source.pdf", content_text="Master text")
         case = _case_obj(case_id=77)
@@ -495,6 +496,7 @@ def test_cross_org_case_copy_blocked(monkeypatch):
 @pytest.mark.asyncio
 async def test_master_edit_after_copy_does_not_mutate_existing_copied_document(monkeypatch, tmp_path):
     source_path = tmp_path / "master.pdf"
+    monkeypatch.setattr(precedents_module, "PRECEDENT_STORAGE_ROOT", tmp_path)
     source_path.write_bytes(b"MASTER_V1")
     precedent = _precedent_obj(precedent_id=12, file_path=str(source_path), file_name="master.pdf", content_text="Master text")
     case = _case_obj(case_id=55)
@@ -534,8 +536,10 @@ def test_text_only_precedent_copy_creates_usable_case_document(monkeypatch):
             res = client.post("/api/v1/precedents/13/copy-to-case", json={"case_id": 88})
             assert res.status_code == 200
             body = res.json()
-            assert body["document"]["file_name"].endswith(".txt")
+            assert body["document"]["file_name"].endswith(".docx")
+            assert body["document"]["file_type"] == precedents_module.DOCX_MIME_TYPE
             document = db.added[0]
-            assert Path(document.file_path).read_text() == "Template clause"
+            from docx import Document as WordDocument
+            assert WordDocument(document.file_path).paragraphs[0].text == "Template clause"
         finally:
             cleanup(client)

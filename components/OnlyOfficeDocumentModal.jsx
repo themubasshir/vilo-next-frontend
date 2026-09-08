@@ -54,7 +54,7 @@ export default function OnlyOfficeDocumentModal({
       setError("");
       setDownloadError("");
       try {
-        const suffix = isViewMode ? "?mode=view" : "";
+        const suffix = isViewMode ? "?mode=view" : "?mode=edit";
         const response = await apiRequest(`/api/v1/documents/${document.id}/onlyoffice/session${suffix}`, {
           method: "POST",
         });
@@ -68,7 +68,7 @@ export default function OnlyOfficeDocumentModal({
         setStatus("error");
         setError(isViewMode
           ? "This Word document could not be opened in the online viewer."
-          : (err?.message || "Failed to open the Word editor"));
+          : "This Word document could not be opened in the online editor.");
       }
     }
 
@@ -80,11 +80,23 @@ export default function OnlyOfficeDocumentModal({
     if (!session?.document_server_url || !containerId) return undefined;
     if (typeof window === "undefined") return undefined;
     let cancelled = false;
+    let openingTimer;
+
+    function failToOpen() {
+      if (cancelled) return;
+      window.clearTimeout(openingTimer);
+      setLoading(false);
+      setStatus("error");
+      setError(isViewMode
+        ? "This Word document could not be opened in the online viewer."
+        : "This Word document could not be opened in the online editor.");
+    }
 
     async function mountEditor() {
       setLoading(true);
       setError("");
       setStatus("script");
+      openingTimer = window.setTimeout(failToOpen, 30000);
       try {
         await loadOnlyOfficeScript(session.document_server_url);
         await waitForDocsAPI();
@@ -96,24 +108,31 @@ export default function OnlyOfficeDocumentModal({
         if (!host) throw new Error("ONLYOFFICE document container was not found.");
         host.replaceChildren();
         setStatus("opening");
-        editorRef.current = new window.DocsAPI.DocEditor(containerId, session.editor_config);
+        editorRef.current = new window.DocsAPI.DocEditor(containerId, {
+          ...session.editor_config,
+          events: {
+            onDocumentReady: () => {
+              if (cancelled) return;
+              window.clearTimeout(openingTimer);
+              setError("");
+              setLoading(false);
+              setStatus("ready");
+            },
+            onError: failToOpen,
+          },
+        });
         initKeyRef.current = sessionKey;
-        if (!cancelled) setStatus("ready");
       } catch (err) {
         if (cancelled) return;
         destroyOnlyOfficeEditor(editorRef, initKeyRef, containerId);
-        setStatus("error");
-        setError(isViewMode
-          ? "This Word document could not be opened in the online viewer."
-          : (err?.message || "Failed to load ONLYOFFICE editor"));
-      } finally {
-        if (!cancelled) setLoading(false);
+        failToOpen();
       }
     }
 
     void mountEditor();
     return () => {
       cancelled = true;
+      window.clearTimeout(openingTimer);
       destroyOnlyOfficeEditor(editorRef, initKeyRef, containerId);
     };
   }, [containerId, isViewMode, session, sessionKey]);
@@ -167,7 +186,7 @@ export default function OnlyOfficeDocumentModal({
             {!fullscreen ? <p className="documents-onlyoffice-modal__subcopy">{isViewMode ? "Word Document Viewer" : "Word Editor"}</p> : null}
           </div>
           <div className="documents-onlyoffice-modal__actions">
-            {isViewMode && downloadPath ? (
+            {downloadPath ? (
               <button type="button" className="vilo-btn vilo-btn--secondary vilo-btn--xs" onClick={download} disabled={downloading}>
                 {downloading ? "Downloading..." : "Download"}
               </button>
@@ -197,7 +216,7 @@ export default function OnlyOfficeDocumentModal({
               <div className="documents-onlyoffice-editor-status">
                 <div className="protected-file-preview-message">
                   <p className="vilo-state vilo-state--error">{error}</p>
-                  {isViewMode && downloadPath ? <button type="button" className="vilo-btn vilo-btn--primary" onClick={download} disabled={downloading}>{downloading ? "Downloading..." : "Download"}</button> : null}
+                  {downloadPath ? <button type="button" className="vilo-btn vilo-btn--primary" onClick={download} disabled={downloading}>{downloading ? "Downloading..." : "Download"}</button> : null}
                 </div>
               </div>
             ) : null}
@@ -228,7 +247,10 @@ async function loadOnlyOfficeScript(documentServerUrl) {
     script.async = true;
     script.dataset.onlyofficeSrc = src;
     script.onload = resolve;
-    script.onerror = () => reject(new Error("Failed to load ONLYOFFICE editor assets."));
+    script.onerror = () => {
+      script.remove();
+      reject(new Error("Failed to load ONLYOFFICE editor assets."));
+    };
     window.document.body.appendChild(script);
   });
 }

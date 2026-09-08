@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { apiDownload, apiRequest, apiUpload } from "../../../lib/api";
 import { getCachedUser } from "../../../lib/auth";
 import ProtectedFilePreviewModal, { useProtectedFilePreview } from "../../../components/ProtectedFilePreviewModal";
@@ -8,12 +9,13 @@ import { formatViloDate, formatViloDateTime } from "../../../lib/dateFormat";
 
 const PRACTICE_TABS = [
   { value: "", label: "All Precedents" },
-  { value: "civil", label: "Civil Litigation" },
-  { value: "employment", label: "Employment Law" },
-  { value: "family", label: "Family Law" },
-  { value: "corporate", label: "Corporate Law" },
-  { value: "criminal", label: "Criminal Law" },
-  { value: "other", label: "Other" },
+  { value: "tort", label: "Tort" },
+  { value: "contracts", label: "Contracts" },
+  { value: "corporate", label: "Corporate" },
+  { value: "real_estate", label: "Real Estate" },
+  { value: "estate_probate", label: "Estate & Probate" },
+  { value: "intellectual_property", label: "Intellectual Property" },
+  { value: "trusts", label: "Trusts" },
 ];
 
 const DOCUMENT_TYPE_OPTIONS = [
@@ -57,7 +59,6 @@ const EDIT_INITIAL = {
 const COPY_INITIAL = {
   case_id: "",
   name: "",
-  content_text: "",
   caseSearch: "",
 };
 
@@ -70,6 +71,8 @@ function formatDateTime(value) {
 }
 
 function formatPracticeArea(value) {
+  const standard = PRACTICE_TABS.find((tab) => tab.value === value);
+  if (standard) return standard.label;
   const map = {
     civil: "Civil Litigation",
     employment: "Employment Law",
@@ -201,6 +204,7 @@ export default function PrecedentsPage() {
   const [copyForm, setCopyForm] = useState(COPY_INITIAL);
   const [copyError, setCopyError] = useState("");
   const [copySaving, setCopySaving] = useState(false);
+  const [copiedDocument, setCopiedDocument] = useState(null);
   const [cases, setCases] = useState([]);
   const [casesLoading, setCasesLoading] = useState(false);
   const [casesError, setCasesError] = useState("");
@@ -227,6 +231,17 @@ export default function PrecedentsPage() {
       });
     return [...PRACTICE_TABS, ...dynamic.sort((a, b) => a.label.localeCompare(b.label))];
   }, [practiceAreas, precedents]);
+  const practiceChoices = useMemo(() => {
+    const choices = PRACTICE_TABS.filter((tab) => tab.value);
+    const known = new Set(choices.flatMap((tab) => [tab.value.toLowerCase(), tab.label.toLowerCase()]));
+    for (const area of practiceAreas) {
+      if (!known.has(area.name.toLowerCase())) {
+        choices.push({ value: area.name, label: `${formatPracticeArea(area.name)} (Custom)` });
+        known.add(area.name.toLowerCase());
+      }
+    }
+    return choices;
+  }, [practiceAreas]);
 
   useEffect(() => {
     if (!canView) return;
@@ -403,6 +418,7 @@ export default function PrecedentsPage() {
   }
 
   function closeDetailModal() {
+    setCopiedDocument(null);
     setSelectedId(null);
     setDetail(null);
     setDetailError("");
@@ -463,7 +479,7 @@ export default function PrecedentsPage() {
   }
 
   async function handleDownload() {
-    if (!detail?.has_file) return;
+    if (!detail?.id) return;
     try {
       await apiDownload(`/api/v1/precedents/${detail.id}/download`);
     } catch (err) {
@@ -495,7 +511,8 @@ export default function PrecedentsPage() {
         body: JSON.stringify({ name: normalizedName }),
       });
       setPracticeAreas((rows) => [...rows.filter((row) => row.id !== created.id), created].sort((a, b) => a.name.localeCompare(b.name)));
-      setCreateForm((current) => ({ ...current, practice_area: created.name }));
+      const standard = PRACTICE_TABS.find((tab) => [tab.value.toLowerCase(), tab.label.toLowerCase()].includes(created.name.toLowerCase()));
+      setCreateForm((current) => ({ ...current, practice_area: standard?.value || created.name }));
       setPracticeAreaName("");
       setPracticeAreaOpen(false);
     } catch (err) {
@@ -544,7 +561,6 @@ export default function PrecedentsPage() {
     setCopyForm({
       case_id: "",
       name: detail?.name || "",
-      content_text: "",
       caseSearch: "",
     });
 
@@ -581,10 +597,10 @@ export default function PrecedentsPage() {
         body: JSON.stringify({
           case_id: Number(copyForm.case_id),
           name: copyForm.name.trim() || null,
-          content_text: copyForm.content_text.trim() || null,
         }),
       });
-      setSuccess(`Precedent copied to case as document #${response.document.id}.`);
+      setSuccess("Precedent copied to File successfully.");
+      setCopiedDocument(response.document);
       setCopyOpen(false);
       setCopyForm(COPY_INITIAL);
     } catch (err) {
@@ -805,12 +821,19 @@ export default function PrecedentsPage() {
                 {detail.is_archived ? <span>Status: Archived</span> : null}
               </div>
 
+              {copiedDocument ? (
+                <div className="precedents-detail-panel" role="status">
+                  <p>Precedent copied to File successfully: {copiedDocument.file_name}</p>
+                  <Link className="vilo-btn vilo-btn--secondary" href={`/dashboard/cases/${copiedDocument.case_id}?tab=documents`}>Open File Documents</Link>
+                </div>
+              ) : null}
+
               {!editOpen && !copyOpen ? (
                 <div className="precedents-modal__actions precedents-modal__actions--split">
                   <div className="precedents-modal__actions-group">
                     {detail.has_file ? <button type="button" className="vilo-btn vilo-btn--secondary" onClick={handleView}>View</button> : null}
-                    {detail.has_file ? <button type="button" className="vilo-btn vilo-btn--secondary" onClick={handleDownload}>Download</button> : null}
-                    <button type="button" className="vilo-btn vilo-btn--primary" onClick={openCopyModal}>Use for Case</button>
+                    {detail.has_file || detail.content_text ? <button type="button" className="vilo-btn vilo-btn--secondary" onClick={handleDownload}>{detail.has_file ? "Download" : "Download Word"}</button> : null}
+                    <button type="button" className="vilo-btn vilo-btn--primary" onClick={openCopyModal}>Copy to File</button>
                   </div>
                   {canManage ? (
                     <div className="precedents-modal__actions-group">
@@ -844,7 +867,8 @@ export default function PrecedentsPage() {
                       required
                     >
                       <option value="">Select practice area</option>
-                      {PRACTICE_TABS.filter((tab) => tab.value).map((tab) => <option key={tab.value} value={tab.value}>{tab.label}</option>)}
+                      {editForm.practice_area && !practiceChoices.some((tab) => tab.value === editForm.practice_area) ? <option value={editForm.practice_area}>{formatPracticeArea(editForm.practice_area)} (Existing)</option> : null}
+                      {practiceChoices.map((tab) => <option key={tab.value} value={tab.value}>{tab.label}</option>)}
                     </select>
                     <select
                       value={editForm.document_type}
@@ -876,36 +900,34 @@ export default function PrecedentsPage() {
               {copyOpen ? (
                 <form className="vilo-form-grid precedents-form-grid" onSubmit={handleCopy}>
                   <div className="precedents-detail-panel">
-                    <h4>Copy to Case</h4>
-                    <p className="precedents-detail-panel__meta">This creates an independent case document. Editing the copy does not change the master precedent.</p>
+                    <h4>Copy Precedent to File</h4>
+                    <p className="precedents-detail-panel__meta">The copied document will be added to the selected File. Edit it there without changing the master precedent.</p>
                   </div>
 
                   <input
                     type="search"
-                    placeholder="Search accessible cases"
+                    placeholder="Search accessible Files / Cases"
                     value={copyForm.caseSearch}
                     onChange={(event) => setCopyForm((current) => ({ ...current, caseSearch: event.target.value }))}
                   />
 
+                  <label htmlFor="copy-file">File / Case *</label>
                   <select
+                    id="copy-file"
                     value={copyForm.case_id}
                     onChange={(event) => setCopyForm((current) => ({ ...current, case_id: event.target.value }))}
                     required
                   >
-                    <option value="">Select case</option>
+                    <option value="">Select File / Case</option>
                     {filteredCases.map((row) => <option key={row.id} value={row.id}>{row.title}</option>)}
                   </select>
 
+                  <label htmlFor="copy-document-name">Document Name</label>
                   <input
-                    placeholder="Case document name"
+                    id="copy-document-name"
+                    placeholder="Document Name"
                     value={copyForm.name}
                     onChange={(event) => setCopyForm((current) => ({ ...current, name: event.target.value }))}
-                  />
-
-                  <textarea
-                    placeholder="Optional content override"
-                    value={copyForm.content_text}
-                    onChange={(event) => setCopyForm((current) => ({ ...current, content_text: event.target.value }))}
                   />
 
                   {casesLoading ? <p className="vilo-state vilo-state--loading">Loading cases...</p> : null}
@@ -914,7 +936,7 @@ export default function PrecedentsPage() {
 
                   <div className="precedents-modal__actions precedents-modal__actions--split">
                     <button type="button" className="vilo-btn vilo-btn--secondary" onClick={() => setCopyOpen(false)}>Cancel</button>
-                    <button type="submit" className="vilo-btn vilo-btn--primary" disabled={copySaving}>{copySaving ? "Copying..." : "Create Case Copy"}</button>
+                    <button type="submit" className="vilo-btn vilo-btn--primary" disabled={copySaving}>{copySaving ? "Copying..." : "Copy to File"}</button>
                   </div>
                 </form>
               ) : null}
@@ -970,7 +992,7 @@ export default function PrecedentsPage() {
                   required
                 >
                   <option value="">Select practice area</option>
-                  {practiceTabs.filter((tab) => tab.value).map((tab) => <option key={tab.value} value={tab.value}>{tab.label}</option>)}
+                  {practiceChoices.map((tab) => <option key={tab.value} value={tab.value}>{tab.label}</option>)}
                 </select>
                 <button type="button" className="precedents-add-practice-action" onClick={() => { setPracticeAreaError(""); setPracticeAreaOpen(true); }}>+ Add Practice Area</button>
                 {practiceAreasError ? <p className="vilo-field-error">{practiceAreasError}</p> : null}

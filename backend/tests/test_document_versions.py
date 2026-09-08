@@ -378,7 +378,8 @@ def test_onlyoffice_view_session_blocks_non_docx(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_onlyoffice_file_endpoint_requires_valid_token(tmp_path):
+async def test_onlyoffice_file_endpoint_requires_valid_token(tmp_path, monkeypatch):
+    monkeypatch.setattr(documents_module, "STORAGE_ROOT", tmp_path)
     doc_path = tmp_path / "org1" / "editable.docx"
     doc_path.parent.mkdir(parents=True, exist_ok=True)
     doc_path.write_bytes(b"docx-binary")
@@ -673,12 +674,13 @@ def test_client_role_cannot_save_docx_edit():
 
 
 @pytest.mark.asyncio
-async def test_download_historical_version_missing_file_returns_404():
+async def test_download_historical_version_missing_file_returns_404(tmp_path, monkeypatch):
+    monkeypatch.setattr(documents_module, "STORAGE_ROOT", tmp_path)
     db = DocsVersionDBStub()
     user = DummyUser(id=10, organization_id=1, name="Admin", email="a@example.com", role=UserRole.admin)
     doc = _doc_obj(path="/tmp/current.pdf")
     missing_version = _version_obj()
-    missing_version.file_path = "/tmp/does-not-exist-vilo-version.bin"
+    missing_version.file_path = str(tmp_path / "does-not-exist-vilo-version.bin")
 
     async def scalar_side_effect(query, *args, **kwargs):
         q = str(query)

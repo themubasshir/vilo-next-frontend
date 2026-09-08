@@ -662,10 +662,8 @@ async def download_onlyoffice_document_file(
     if not is_docx_document(doc):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="ONLYOFFICE editing currently supports DOCX only")
 
-    path = Path(doc.file_path)
-    if not path.exists():
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Stored file not found")
-    return FileResponse(path=str(path), filename=doc.file_name, media_type=doc.file_type or DOCX_MIME_TYPE)
+    path = resolve_stored_file(doc.file_path, STORAGE_ROOT)
+    return FileResponse(path=str(path), filename=doc.file_name, media_type=DOCX_MIME_TYPE)
 
 
 @router.get("/{document_id}/download")
@@ -957,7 +955,7 @@ async def handle_onlyoffice_callback(
     if len(data) > MAX_UPLOAD_BYTES:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Edited file exceeds upload size limit")
 
-    current_file_bytes = Path(doc.file_path).read_bytes()
+    current_file_bytes = resolve_stored_file(doc.file_path, STORAGE_ROOT).read_bytes()
     if current_file_bytes == data:
         return ONLYOFFICE_CALLBACK_SUCCESS
 
@@ -1041,10 +1039,8 @@ async def download_document_version(
     )
     if not version:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Version not found")
-    path = Path(version.file_path)
-    if not path.exists():
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Stored file not found")
-    return FileResponse(path=str(path), filename=version.file_name, media_type=version.file_type or "application/octet-stream")
+    path = resolve_stored_file(version.file_path, STORAGE_ROOT)
+    return FileResponse(path=str(path), filename=version.file_name, media_type=resolved_media_type(version.file_name, version.file_type))
 
 
 @router.delete("/{document_id}")
