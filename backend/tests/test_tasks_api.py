@@ -376,6 +376,88 @@ def test_patch_priority_update():
         cleanup(client)
 
 
+def test_admin_can_edit_protected_task_fields():
+    existing = task_obj(title="Original title")
+    db = TaskDBStub(scalar_values=[existing])
+    client = build_client("admin", db)
+    try:
+        res = client.patch("/api/v1/tasks/5", json={"title": "Admin revision"})
+        assert res.status_code == 200
+        assert res.json()["title"] == "Admin revision"
+        assert db.commits == 1
+    finally:
+        cleanup(client)
+
+
+def test_admin_can_delete_task():
+    existing = task_obj(archived_at=None)
+    db = TaskDBStub(scalar_values=[existing])
+    client = build_client("admin", db)
+    try:
+        res = client.delete("/api/v1/tasks/5")
+        assert res.status_code == 200
+        assert res.json() == {"ok": True, "archived": True}
+        assert existing.archived_at is not None
+        assert db.commits == 1
+    finally:
+        cleanup(client)
+
+
+@pytest.mark.parametrize("role", ["partner", "lawyer", "paralegal"])
+def test_non_admin_cannot_edit_protected_task_fields(role):
+    existing = task_obj(title="Original title")
+    db = TaskDBStub(scalar_values=[existing])
+    client = build_client(role, db)
+    try:
+        res = client.patch("/api/v1/tasks/5", json={"title": "Unauthorized revision"})
+        assert res.status_code == 403
+        assert res.json()["detail"] == "You do not have permission to edit this task."
+        assert existing.title == "Original title"
+        assert db.commits == 0
+    finally:
+        cleanup(client)
+
+
+@pytest.mark.parametrize("role", ["partner", "lawyer", "paralegal"])
+def test_non_admin_cannot_delete_task(role):
+    existing = task_obj(archived_at=None)
+    db = TaskDBStub(scalar_values=[existing])
+    client = build_client(role, db)
+    try:
+        res = client.delete("/api/v1/tasks/5")
+        assert res.status_code == 403
+        assert res.json()["detail"] == "You do not have permission to delete this task."
+        assert existing.archived_at is None
+        assert db.commits == 0
+    finally:
+        cleanup(client)
+
+
+def test_paralegal_can_still_change_task_status():
+    existing = task_obj(status="not_started")
+    db = TaskDBStub(scalar_values=[existing])
+    client = build_client("paralegal", db)
+    try:
+        res = client.patch("/api/v1/tasks/5", json={"status": "in_progress"})
+        assert res.status_code == 200
+        assert res.json()["status"] == "in_progress"
+    finally:
+        cleanup(client)
+
+
+@pytest.mark.parametrize("method", ["patch", "delete"])
+def test_task_mutation_cross_organization_lookup_remains_hidden(method):
+    db = TaskDBStub(scalar_values=[None])
+    client = build_client("admin", db, org_id=99)
+    try:
+        response = client.patch("/api/v1/tasks/5", json={"title": "Blocked"}) if method == "patch" else client.delete("/api/v1/tasks/5")
+        assert response.status_code == 404
+        assert response.json()["detail"] == "Task not found"
+        assert db.commits == 0
+    finally:
+        cleanup(client)
+
+
 def test_mark_complete_endpoint():
     existing = task_obj(status="in_progress", completed_at=None)
     db = TaskDBStub(scalar_values=[existing])

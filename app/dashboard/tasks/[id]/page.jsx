@@ -4,6 +4,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { apiRequest } from "../../../../lib/api";
+import { getCachedUser } from "../../../../lib/auth";
+import { formatViloDateTime } from "../../../../lib/dateFormat";
 
 const STATUS_OPTIONS = ["not_started", "in_progress", "waiting", "completed"];
 const PRIORITY_OPTIONS = ["low", "medium", "high", "urgent"];
@@ -16,10 +18,7 @@ function normalizeLabel(value) {
 }
 
 function formatDateTime(value) {
-  if (!value) return "-";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "-";
-  return date.toLocaleString([], { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
+  return formatViloDateTime(value);
 }
 
 function isCompleted(task) {
@@ -72,6 +71,8 @@ export default function TaskDetailPage() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [editOpen, setEditOpen] = useState(searchParams.get("edit") === "1");
+  const [currentUser, setCurrentUser] = useState(getCachedUser());
+  const canManageTask = currentUser?.role === "admin";
 
   async function load() {
     setLoading(true);
@@ -100,10 +101,18 @@ export default function TaskDetailPage() {
   }, [taskId]);
 
   useEffect(() => {
+    function handleUserUpdated(event) {
+      setCurrentUser(event.detail || getCachedUser());
+    }
+    window.addEventListener("vilo:user-updated", handleUserUpdated);
+    return () => window.removeEventListener("vilo:user-updated", handleUserUpdated);
+  }, []);
+
+  useEffect(() => {
     const shouldOpen = searchParams.get("edit") === "1";
-    setEditOpen(shouldOpen);
-    if (shouldOpen && task) setForm(buildInitialForm(task));
-  }, [searchParams, task]);
+    setEditOpen(shouldOpen && canManageTask);
+    if (shouldOpen && canManageTask && task) setForm(buildInitialForm(task));
+  }, [canManageTask, searchParams, task]);
 
   useEffect(() => {
     if (!editOpen) return;
@@ -199,19 +208,6 @@ export default function TaskDetailPage() {
     }
   }
 
-  async function archiveTask() {
-    setSaving(true);
-    setError("");
-    setSuccess("");
-    try {
-      await apiRequest(`/api/v1/tasks/${taskId}/archive`, { method: "POST" });
-      router.push("/dashboard/tasks");
-    } catch (err) {
-      setError(err.message || "Unable to archive task.");
-      setSaving(false);
-    }
-  }
-
   async function deleteTask() {
     setSaving(true);
     setError("");
@@ -242,7 +238,7 @@ export default function TaskDetailPage() {
           <p className="vilo-card-copy">Dedicated task detail for status changes, linked records, and editing.</p>
         </div>
         <div className="task-detail-page__actions">
-          <button type="button" className="vilo-btn vilo-btn--secondary" onClick={() => updateSearchParam("edit", "1")}>Edit Task</button>
+          {canManageTask ? <button type="button" className="vilo-btn vilo-btn--secondary" onClick={() => updateSearchParam("edit", "1")}>Edit Task</button> : null}
           {!isCompleted(task) ? <button type="button" className="vilo-btn vilo-btn--primary" onClick={completeTask} disabled={saving}>Mark Complete</button> : null}
         </div>
       </div>
@@ -269,12 +265,12 @@ export default function TaskDetailPage() {
                   {STATUS_OPTIONS.map((option) => <option key={option} value={option}>{normalizeLabel(option)}</option>)}
                 </select>
               </label>
-              <label>
+              {canManageTask ? <label>
                 <span>Priority</span>
                 <select value={task.priority} onChange={(event) => handlePriorityChange(event.target.value)} disabled={saving}>
                   {PRIORITY_OPTIONS.map((option) => <option key={option} value={option}>{normalizeLabel(option)}</option>)}
                 </select>
-              </label>
+              </label> : null}
             </div>
           </div>
 
@@ -300,13 +296,12 @@ export default function TaskDetailPage() {
             <Link className="vilo-btn vilo-btn--secondary" href="/dashboard/tasks">Back to Task List</Link>
             {task.client_id ? <Link className="vilo-btn vilo-btn--secondary" href={`/dashboard/clients/${task.client_id}`}>Open Client</Link> : null}
             {task.case_id ? <Link className="vilo-btn vilo-btn--secondary" href={`/dashboard/cases/${task.case_id}`}>Open Case</Link> : null}
-            <button type="button" className="vilo-btn vilo-btn--secondary" onClick={archiveTask} disabled={saving}>Archive Task</button>
-            <button type="button" className="vilo-btn vilo-btn--danger" onClick={deleteTask} disabled={saving}>Delete Task</button>
+            {canManageTask ? <button type="button" className="vilo-btn vilo-btn--danger" onClick={deleteTask} disabled={saving}>Delete Task</button> : null}
           </div>
         </article>
       </div>
 
-      {editOpen ? (
+      {editOpen && canManageTask ? (
         <div className="vilo-modal-overlay" onClick={() => updateSearchParam("edit", null)}>
           <div className="vilo-modal task-editor-modal" onClick={(event) => event.stopPropagation()}>
             <div className="vilo-modal__header">

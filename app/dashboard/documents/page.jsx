@@ -8,6 +8,7 @@ import { DiscardChangesDialog, useModalCloseGuard } from "../../../components/us
 import ProtectedFilePreviewModal, { useProtectedFilePreview } from "../../../components/ProtectedFilePreviewModal";
 import OnlyOfficeDocumentModal from "../../../components/OnlyOfficeDocumentModal";
 import { getDocumentViewerType } from "../../../lib/documentViewer";
+import { formatViloDate, formatViloDateTime } from "../../../lib/dateFormat";
 
 const initialForm = {
   client_id: "",
@@ -85,6 +86,7 @@ function DocumentsPageContent() {
   const [filterUploader, setFilterUploader] = useState("");
   const [filterVisibility, setFilterVisibility] = useState("");
   const [filterType, setFilterType] = useState("");
+  const [filterCategory, setFilterCategory] = useState("");
   const [filterFrom, setFilterFrom] = useState("");
   const [filterTo, setFilterTo] = useState("");
   const [uploaders, setUploaders] = useState([]);
@@ -113,9 +115,10 @@ function DocumentsPageContent() {
     setLoading(true);
     setError("");
     try {
-      const params = new URLSearchParams({ page: String(page), per_page: String(perPage), sort_by: sortBy });
+      const params = new URLSearchParams({ page: String(page), per_page: String(perPage), sort_by: sortBy, exclude_client_ids: "true" });
       if (searchQuery.trim()) params.set("search", searchQuery.trim());
-      if (activeFolder !== "all") params.set("category", activeFolder);
+      if (filterCategory) params.set("category", filterCategory);
+      else if (activeFolder !== "all") params.set("category", activeFolder);
       if (activeTab === "mine" && currentUser?.id) params.set("uploaded_by", String(currentUser.id));
       if (filterCase) params.set("case_id", filterCase);
       if (filterClient) params.set("client_id", filterClient);
@@ -131,8 +134,9 @@ function DocumentsPageContent() {
         apiRequest("/api/v1/clients"),
         apiRequest("/api/v1/team"),
       ]);
-      setDocuments(docs.items || []);
-      setServerTotal(docs.total || 0);
+      const ordinaryDocuments = (docs.items || []).filter((document) => document.category !== "client_id");
+      setDocuments(ordinaryDocuments);
+      setServerTotal(Number(docs.total || 0));
       setServerTotalPages(docs.total_pages || 1);
       setVersionTarget((current) => {
         if (!current) return current;
@@ -150,7 +154,7 @@ function DocumentsPageContent() {
 
   useEffect(() => {
     load();
-  }, [activeFolder, activeTab, filterCase, filterClient, filterFrom, filterTo, filterType, filterUploader, filterVisibility, page, perPage, requestedDocumentId, searchQuery, sortBy]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [activeFolder, activeTab, filterCase, filterCategory, filterClient, filterFrom, filterTo, filterType, filterUploader, filterVisibility, page, perPage, requestedDocumentId, searchQuery, sortBy]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const timer = window.setTimeout(() => setSearchQuery(draftSearch), 300);
@@ -184,7 +188,7 @@ function DocumentsPageContent() {
 
   useEffect(() => {
     setPage(1);
-  }, [searchQuery, activeFolder, activeTab, sortBy, perPage, filterCase, filterClient, filterFrom, filterTo, filterType, filterUploader, filterVisibility]);
+  }, [searchQuery, activeFolder, activeTab, sortBy, perPage, filterCase, filterCategory, filterClient, filterFrom, filterTo, filterType, filterUploader, filterVisibility]);
 
   useEffect(() => {
     function handleKeydown(event) {
@@ -217,7 +221,7 @@ function DocumentsPageContent() {
 
     documents.forEach((document) => {
       const value = String(document.category || "").trim();
-      if (!value) return;
+      if (!value || value === "client_id") return;
       if (seen.has(value)) return;
       seen.add(value);
       extras.push({ value, label: toTitleCase(value) });
@@ -536,6 +540,7 @@ function DocumentsPageContent() {
 
   function handleFolderSelect(folderKey) {
     setActiveFolder(folderKey);
+    setFilterCategory("");
     setFolderNotice("");
   }
 
@@ -625,6 +630,7 @@ function DocumentsPageContent() {
               </div>
             </div>
             <div className="documents-advanced-filters">
+              <label><span>Category</span><select value={filterCategory} onChange={(event) => { setFilterCategory(event.target.value); setActiveFolder("all"); }}><option value="">All Categories</option>{categoryOptions.filter((option) => option.value && option.value !== "client_id").map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
               <label><span>Case</span><select value={filterCase} onChange={(event) => setFilterCase(event.target.value)}><option value="">All cases</option>{cases.map((row) => <option key={row.id} value={row.id}>{row.title}</option>)}</select></label>
               <label><span>Client</span><select value={filterClient} onChange={(event) => setFilterClient(event.target.value)}><option value="">All clients</option>{clients.map((row) => <option key={row.id} value={row.id}>{row.name}</option>)}</select></label>
               <label><span>Uploaded by</span><select value={filterUploader} onChange={(event) => setFilterUploader(event.target.value)}><option value="">Anyone</option>{uploaders.map((row) => <option key={row.id} value={row.id}>{row.name}</option>)}</select></label>
@@ -632,7 +638,7 @@ function DocumentsPageContent() {
               <label><span>File type</span><select value={filterType} onChange={(event) => setFilterType(event.target.value)}><option value="">All types</option><option value="pdf">PDF</option><option value="word">Word</option><option value="image">Image</option></select></label>
               <label><span>Uploaded from</span><input type="date" value={filterFrom} onChange={(event) => setFilterFrom(event.target.value)} /></label>
               <label><span>Uploaded to</span><input type="date" value={filterTo} onChange={(event) => setFilterTo(event.target.value)} /></label>
-              <button type="button" className="vilo-btn vilo-btn--secondary vilo-btn--xs" onClick={() => { setDraftSearch(""); setSearchQuery(""); setActiveFolder("all"); setActiveTab("all"); setFilterCase(""); setFilterClient(""); setFilterUploader(""); setFilterVisibility(""); setFilterType(""); setFilterFrom(""); setFilterTo(""); setPage(1); const params = new URLSearchParams(searchParams.toString()); params.delete("document_id"); router.replace(params.toString() ? `${pathname}?${params.toString()}` : pathname); }}>Clear filters</button>
+              <button type="button" className="vilo-btn vilo-btn--secondary vilo-btn--xs" onClick={() => { setDraftSearch(""); setSearchQuery(""); setActiveFolder("all"); setActiveTab("all"); setFilterCategory(""); setFilterCase(""); setFilterClient(""); setFilterUploader(""); setFilterVisibility(""); setFilterType(""); setFilterFrom(""); setFilterTo(""); setPage(1); const params = new URLSearchParams(searchParams.toString()); params.delete("document_id"); router.replace(params.toString() ? `${pathname}?${params.toString()}` : pathname); }}>Clear filters</button>
             </div>
 
             {loading ? (
@@ -641,7 +647,7 @@ function DocumentsPageContent() {
 
             {!loading && !sortedDocuments.length ? (
               <div className="documents-state">
-                <p className="vilo-state">{searchQuery || activeFolder !== "all" || activeTab !== "all" ? "No documents matched the current filters." : "No documents uploaded yet."}</p>
+                <p className="vilo-state">{searchQuery || filterCategory || activeFolder !== "all" || activeTab !== "all" || filterCase || filterClient || filterUploader || filterVisibility || filterType || filterFrom || filterTo ? "No documents matched your current filters." : "No documents uploaded yet."}</p>
               </div>
             ) : null}
 
@@ -961,7 +967,7 @@ function DocumentsPageContent() {
                 </button>
               </div>
               <div className="documents-version-current__meta">
-                <span>Saved {new Date(versionTarget.updated_at || versionTarget.created_at).toLocaleString()}</span>
+                <span>Saved {formatViloDateTime(versionTarget.updated_at || versionTarget.created_at)}</span>
                 <span>{versionTarget.version_note || "No version note."}</span>
               </div>
               {!versions.length ? <p className="vilo-state">No previous versions.</p> : null}
@@ -975,7 +981,7 @@ function DocumentsPageContent() {
                           <td>v{version.version_number}</td>
                           <td>{version.file_name}</td>
                           <td>{formatFileSize(version.file_size)}</td>
-                          <td>{new Date(version.created_at).toLocaleString()}</td>
+                          <td>{formatViloDateTime(version.created_at)}</td>
                           <td>User #{version.uploaded_by}</td>
                           <td>{formatVersionSource(version.source)}</td>
                           <td>{version.version_note || version.notes || "-"}</td>
@@ -1029,25 +1035,7 @@ function formatFileSize(bytes) {
 }
 
 function formatRelativeDate(value) {
-  if (!value) return "-";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "-";
-
-  const diffMs = Date.now() - date.getTime();
-  const diffMinutes = Math.max(0, Math.floor(diffMs / 60000));
-
-  if (diffMinutes < 1) return "Just now";
-  if (diffMinutes < 60) return `${diffMinutes} minute${diffMinutes === 1 ? "" : "s"} ago`;
-  if (diffMinutes < 1440) {
-    const hours = Math.floor(diffMinutes / 60);
-    return `${hours} hour${hours === 1 ? "" : "s"} ago`;
-  }
-  if (diffMinutes < 10080) {
-    const days = Math.floor(diffMinutes / 1440);
-    return `${days} day${days === 1 ? "" : "s"} ago`;
-  }
-
-  return date.toLocaleDateString();
+  return formatViloDate(value);
 }
 
 function toTitleCase(value) {

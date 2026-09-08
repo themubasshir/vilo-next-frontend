@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { apiRequest } from "../../lib/api";
+import { formatViloDate } from "../../lib/dateFormat";
 
 const POLL_INTERVAL_MS = 25_000;
 
@@ -12,7 +13,7 @@ function formatSchedule(metadata) {
   const value = new Date(raw);
   if (Number.isNaN(value.getTime())) return null;
   return {
-    date: value.toLocaleDateString(undefined, { dateStyle: "medium" }),
+    date: formatViloDate(value),
     time: value.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }),
   };
 }

@@ -101,7 +101,7 @@ def test_files_filters_are_server_side_and_case_access_scoped():
     response = asyncio.run(documents_api.query_documents(
         document_id=None, search="motion", case_id=21, client_id=31, category="case_files",
         file_type="pdf", uploaded_by=7, created_from=date(2026, 1, 1), created_to=date(2026, 12, 31),
-        visibility="internal", sort_by="updated", page=1, per_page=10, db=db, current_user=user(),
+        visibility="internal", exclude_client_ids=True, sort_by="updated", page=1, per_page=10, db=db, current_user=user(),
     ))
     assert response.total == 1
     assert response.items[0].case_title == "Archived Appeal"
@@ -110,6 +110,8 @@ def test_files_filters_are_server_side_and_case_access_scoped():
     assert "case_assignments" in sql
     assert "documents.uploaded_by" in sql
     assert "documents.file_type" in sql
+    assert "documents.category IS NULL" in "\n".join(db.queries)
+    assert "documents.category !=" in "\n".join(db.queries)
 
 
 class SearchDB:

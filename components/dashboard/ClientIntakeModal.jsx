@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { DiscardChangesDialog, useModalCloseGuard } from "../useModalCloseGuard";
+import { formatViloDateInput, toIsoDateFromViloInput } from "../../lib/dateFormat";
 
 const ID_TYPE_OPTIONS = [
   { value: "national_id", label: "National ID" },
@@ -63,7 +64,13 @@ function readMetaLine(notes, label) {
 }
 
 function parseClient(client) {
-  if (client?._draftForm) return { ...initialState, ...client._draftForm };
+  if (client?._draftForm) {
+    return {
+      ...initialState,
+      ...client._draftForm,
+      date_of_birth: formatViloDateInput(client._draftForm.date_of_birth),
+    };
+  }
   const name = String(client?.name || "").trim();
   const [first_name = "", ...rest] = name.split(" ");
   const last_name = rest.join(" ").trim();
@@ -78,7 +85,7 @@ function parseClient(client) {
     address: client?.address || readMetaLine(client?.notes, "Address") || "",
     trn_no: client?.trn_no || readMetaLine(client?.notes, "TRN No") || "",
     occupation: client?.occupation || "",
-    date_of_birth: client?.date_of_birth || readMetaLine(client?.notes, "Date of Birth") || "",
+    date_of_birth: formatViloDateInput(client?.date_of_birth || readMetaLine(client?.notes, "Date of Birth") || ""),
     email: client?.email || "",
     phone: client?.phone || "",
     preferred_contact_method: client?.preferred_contact_method || readMetaLine(client?.notes, "Preferred Contact Method") || "email",
@@ -100,7 +107,7 @@ function payloadFromState(state, existingClient) {
     trn_no: state.trn_no || null,
     occupation: state.client_type === "corporate" ? null : state.occupation || null,
     preferred_contact_method: state.preferred_contact_method || null,
-    date_of_birth: state.date_of_birth || null,
+    date_of_birth: toIsoDateFromViloInput(state.date_of_birth) || null,
     billing_currency: state.billing_currency || "JMD",
   };
 }
@@ -156,6 +163,7 @@ export default function ClientIntakeModal({
     if (!form.address.trim()) next.address = "Address is required.";
     if (!form.trn_no.trim()) next.trn_no = "TRN No. is required.";
     if (!corporate && !form.date_of_birth.trim()) next.date_of_birth = "Date of birth is required.";
+    else if (!corporate && toIsoDateFromViloInput(form.date_of_birth) === null) next.date_of_birth = "Use date format DD/MM/YYYY.";
     if (!form.email.trim()) next.email = "Email is required.";
     if (!form.phone.trim()) next.phone = "Phone is required.";
     setErrors(next);
@@ -263,7 +271,7 @@ export default function ClientIntakeModal({
             <Field label="Address *" value={form.address} onChange={(v) => setForm({ ...form, address: v })} error={errors.address} placeholder="Enter Address" />
             <Field label="TRN No. *" value={form.trn_no} onChange={(v) => setForm({ ...form, trn_no: v })} error={errors.trn_no} placeholder="Enter TRN" />
             {!corporate ? <Field label="Occupation" value={form.occupation} onChange={(v) => setForm({ ...form, occupation: v })} placeholder="Enter Occupation" /> : null}
-            {!corporate ? <Field label="Date of Birth *" value={form.date_of_birth} onChange={(v) => setForm({ ...form, date_of_birth: v })} error={errors.date_of_birth} placeholder="YYYY-MM-DD" /> : null}
+            {!corporate ? <Field label="Date of Birth *" value={form.date_of_birth} onChange={(v) => setForm({ ...form, date_of_birth: v })} error={errors.date_of_birth} placeholder="DD/MM/YYYY" inputMode="numeric" maxLength={10} /> : null}
             <Field label="Email *" value={form.email} onChange={(v) => setForm({ ...form, email: v })} error={errors.email} placeholder="Enter Email" />
             <Field label="Phone *" value={form.phone} onChange={(v) => setForm({ ...form, phone: v })} error={errors.phone} placeholder="Enter Phone" />
             <div><label>Preferred Contact Method *</label><select value={form.preferred_contact_method} onChange={(e) => setForm({ ...form, preferred_contact_method: e.target.value })}><option value="email">Email</option><option value="phone">Phone</option><option value="sms">SMS</option><option value="whatsapp">WhatsApp</option></select></div>
@@ -373,11 +381,11 @@ export default function ClientIntakeModal({
   );
 }
 
-function Field({ label, value, onChange, placeholder, error }) {
+function Field({ label, value, onChange, placeholder, error, ...inputProps }) {
   return (
     <div>
       <label>{label}</label>
-      <input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} />
+      <input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} {...inputProps} />
       {error ? <small className="vilo-form-error">{error}</small> : null}
     </div>
   );

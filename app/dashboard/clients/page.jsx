@@ -6,6 +6,7 @@ import { Suspense, useEffect, useMemo, useState } from "react";
 import { apiRequest, apiUpload } from "../../../lib/api";
 import ProtectedFilePreviewModal, { useProtectedFilePreview } from "../../../components/ProtectedFilePreviewModal";
 import ClientIntakeModal from "../../../components/dashboard/ClientIntakeModal";
+import { formatViloDateTime } from "../../../lib/dateFormat";
 
 function isArchived(client) {
   if (client?.archived_at) return true;
@@ -322,7 +323,7 @@ function ClientsPageContent() {
         <div className="case-tab-panel">
           <h2>{tab === "draft" ? "Incomplete Client Intakes" : "Client Entries"}</h2>
           {tab === "draft" ? (
-            drafts.length ? <div className="vilo-table-wrap"><table className="team-table"><thead><tr><th>Name</th><th>Last Updated</th><th>Actions</th></tr></thead><tbody>{drafts.map((draft) => <tr key={draft.id}><td>{[draft.payload?.first_name, draft.payload?.last_name].filter(Boolean).join(" ") || draft.payload?.company_name || "Untitled intake"}</td><td>{new Date(draft.updated_at).toLocaleString()}</td><td><div className="vilo-table-actions"><button type="button" className="vilo-btn vilo-btn--secondary vilo-btn--xs" onClick={() => { setSelectedDraft(draft); setCreateOpen(true); }}>Open</button><button type="button" className="vilo-btn vilo-btn--danger vilo-btn--xs" onClick={async () => { setSelectedDraft(draft); await apiRequest(`/api/v1/clients/intake-drafts/${draft.id}`, { method: "DELETE" }); setSelectedDraft(null); await load(); }}>Discard</button></div></td></tr>)}</tbody></table></div> : <div className="vilo-state-block"><p className="vilo-state">No client intake drafts.</p></div>
+            drafts.length ? <div className="vilo-table-wrap"><table className="team-table"><thead><tr><th>Name</th><th>Last Updated</th><th>Actions</th></tr></thead><tbody>{drafts.map((draft) => <tr key={draft.id}><td>{[draft.payload?.first_name, draft.payload?.last_name].filter(Boolean).join(" ") || draft.payload?.company_name || "Untitled intake"}</td><td>{formatViloDateTime(draft.updated_at)}</td><td><div className="vilo-table-actions"><button type="button" className="vilo-btn vilo-btn--secondary vilo-btn--xs" onClick={() => { setSelectedDraft(draft); setCreateOpen(true); }}>Open</button><button type="button" className="vilo-btn vilo-btn--danger vilo-btn--xs" onClick={async () => { setSelectedDraft(draft); await apiRequest(`/api/v1/clients/intake-drafts/${draft.id}`, { method: "DELETE" }); setSelectedDraft(null); await load(); }}>Discard</button></div></td></tr>)}</tbody></table></div> : <div className="vilo-state-block"><p className="vilo-state">No client intake drafts.</p></div>
           ) : null}
           {loading ? <div className="vilo-state-block"><p className="vilo-state vilo-state--loading">Loading clients...</p></div> : null}
           {tab !== "draft" && !loading && !filtered.length ? <div className="vilo-state-block"><p className="vilo-state">No clients matched your current filters.</p></div> : null}

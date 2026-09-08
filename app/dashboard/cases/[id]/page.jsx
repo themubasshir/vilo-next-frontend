@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { apiDownload, apiRequest, apiUpload } from "../../../../lib/api";
 import { getToken } from "../../../../lib/auth";
+import { formatViloDate, formatViloDateTime } from "../../../../lib/dateFormat";
 
 const TABS = ["timeline", "notes", "tasks", "documents", "team"];
 const EVENT_TYPES = ["milestone", "hearing", "filing", "call", "meeting", "note"];
@@ -21,17 +22,11 @@ const EMPTY_EVENT = {
 };
 
 function fmtDate(v) {
-  if (!v) return "-";
-  const d = new Date(v);
-  if (Number.isNaN(d.getTime())) return "-";
-  return d.toLocaleDateString("en-US");
+  return formatViloDate(v);
 }
 
 function fmtDateTime(v) {
-  if (!v) return "-";
-  const d = new Date(v);
-  if (Number.isNaN(d.getTime())) return "-";
-  return d.toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
+  return formatViloDateTime(v);
 }
 
 function labelize(value) {
@@ -889,7 +884,7 @@ export default function CaseDetailPage() {
                     <tr key={row.id}>
                       <td>v{row.version_number}</td>
                       <td>{row.file_name}</td>
-                      <td>{new Date(row.created_at).toLocaleString()}</td>
+                      <td>{formatViloDateTime(row.created_at)}</td>
                       <td>{row.notes || "-"}</td>
                       <td><button type="button" className="vilo-btn vilo-btn--ghost vilo-btn--xs" onClick={() => apiDownload(`/api/v1/documents/${selectedDocument.id}/versions/${row.id}/download`)}>Download</button></td>
                     </tr>

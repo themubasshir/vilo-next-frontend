@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiRequest } from "../../lib/api";
 import UserAvatar from "../UserAvatar";
+import { formatViloDateTime } from "../../lib/dateFormat";
 
 const NEW_ACTIONS = [
   ["New Case", "/dashboard/cases?create=1"],
@@ -227,8 +228,8 @@ export function Navbar({ onMenuClick, user, onLogout }) {
             {timerError ? <p className="vilo-state vilo-state--error">{timerError}</p> : null}
           </div>
         ) : null}
-        <button type="button" className="dashboard-navbar__icon-button is-notification" aria-label="Notifications" aria-expanded={openMenu === "notifications"} onClick={() => toggleMenu("notifications")}><BellIcon />{unreadCount > 0 ? <span className="dashboard-navbar__alert-dot" /> : null}</button>
-        {openMenu === "notifications" ? <div className="dashboard-navbar__notifications"><div className="dashboard-navbar__notifications-header"><strong>Notifications</strong><div><button type="button" onClick={() => apiRequest("/api/v1/notifications/mark-all-read", { method: "POST" }).then(loadNotifications)}>Mark all read</button><button type="button" className="dashboard-navbar__notifications-close" aria-label="Close notifications" onClick={() => setOpenMenu("")}>×</button></div></div><div className="dashboard-navbar__notifications-list">{items.length === 0 ? <p>No notifications yet.</p> : null}{items.map((item) => <button key={item.id} type="button" className="dashboard-navbar__notification-item" onClick={() => openNotification(item)}><div><strong>{item.title}</strong>{item.body ? <span>{item.body}</span> : null}<small>{new Date(item.created_at).toLocaleString()}</small></div>{!item.is_read ? <em>New</em> : null}</button>)}</div></div> : null}
+        <button type="button" className="dashboard-navbar__icon-button is-notification" aria-label="Notifications" aria-expanded={openMenu === "notifications"} onClick={() => toggleMenu("notifications")}><BellIcon />{unreadCount > 0 ? <span className="dashboard-navbar__alert-dot" aria-hidden="true" /> : null}</button>
+        {openMenu === "notifications" ? <div className="dashboard-navbar__notifications"><div className="dashboard-navbar__notifications-header"><strong>Notifications</strong><div><button type="button" onClick={() => apiRequest("/api/v1/notifications/mark-all-read", { method: "POST" }).then(loadNotifications)}>Mark all read</button><button type="button" className="dashboard-navbar__notifications-close" aria-label="Close notifications" onClick={() => setOpenMenu("")}>×</button></div></div><div className="dashboard-navbar__notifications-list">{items.length === 0 ? <p>No notifications yet.</p> : null}{items.map((item) => <button key={item.id} type="button" className="dashboard-navbar__notification-item" onClick={() => openNotification(item)}><div><strong>{item.title}</strong>{item.body ? <span>{item.body}</span> : null}<small>{formatViloDateTime(item.created_at)}</small></div>{!item.is_read ? <em>New</em> : null}</button>)}</div></div> : null}
         <button type="button" className="dashboard-navbar__avatar-button" aria-label="Profile Settings" onClick={() => router.push("/dashboard/settings")}><UserAvatar user={user} size="sm" /><span className="dashboard-navbar__online-dot" /></button>
         <button type="button" className="dashboard-navbar__identity dashboard-navbar__identity--button" onClick={() => router.push("/dashboard/settings")}><strong>{user?.name || "Loading..."}</strong><span>{user?.role || ""}</span></button>
         <button type="button" className="vilo-btn vilo-btn--secondary vilo-btn--xs" onClick={onLogout}>Logout</button>

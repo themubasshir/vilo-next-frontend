@@ -6,6 +6,7 @@ import { createPortal } from "react-dom";
 import { useRouter, useSearchParams } from "next/navigation";
 import { apiRequest } from "../../../lib/api";
 import { getCachedUser } from "../../../lib/auth";
+import { formatViloDate } from "../../../lib/dateFormat";
 import { DiscardChangesDialog, useModalCloseGuard } from "../../../components/useModalCloseGuard";
 
 const STATUS_OPTIONS = ["not_started", "in_progress", "waiting", "completed"];
@@ -58,10 +59,7 @@ const REMINDER_OPTIONS = [
 ];
 
 function formatTaskDueDate(value) {
-  if (!value) return "-";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "-";
-  return date.toLocaleDateString([], { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
+  return formatViloDate(value);
 }
 
 function normalizeLabel(value) {
@@ -192,6 +190,7 @@ function TasksPageContent() {
   const [activeDropdown, setActiveDropdown] = useState(null);
   const [statusSavingId, setStatusSavingId] = useState(null);
   const [currentUser, setCurrentUser] = useState(getCachedUser());
+  const canManageTask = currentUser?.role === "admin";
   const [activeTab, setActiveTab] = useState(tabFromLegacyFilter(searchParams.get("filter")));
   const [taskSearch, setTaskSearch] = useState("");
   const [assignedStaff, setAssignedStaff] = useState("");
@@ -513,17 +512,6 @@ function TasksPageContent() {
     }
   }
 
-  async function archiveTask(taskId) {
-    setError("");
-    try {
-      const updated = await apiRequest(`/api/v1/tasks/${taskId}/archive`, { method: "POST" });
-      setActiveDropdown(null);
-      setTasks((current) => current.map((task) => (Number(task.id) === Number(taskId) ? updated : task)));
-    } catch (err) {
-      setError(err.message || "Unable to archive task.");
-    }
-  }
-
   async function deleteTask(taskId) {
     setError("");
     try {
@@ -571,10 +559,9 @@ function TasksPageContent() {
             <>
               <button type="button" onClick={() => { setActiveDropdown(null); router.push(detailHref); }}>View Details</button>
               {task.case_id ? <Link href={`/dashboard/cases/${task.case_id}`} onClick={() => setActiveDropdown(null)}>View Case</Link> : <button type="button" disabled>View Case</button>}
-              <button type="button" onClick={() => { setActiveDropdown(null); router.push(editHref); }}>Edit Task</button>
+              {canManageTask ? <button type="button" onClick={() => { setActiveDropdown(null); router.push(editHref); }}>Edit Task</button> : null}
               {!isCompleted(task) ? <button type="button" onClick={() => completeTask(task.id)}>Mark as Complete</button> : null}
-              <button type="button" onClick={() => archiveTask(task.id)}>Archive Task</button>
-              <button type="button" className="is-danger" onClick={() => deleteTask(task.id)}>Delete Task</button>
+              {canManageTask ? <button type="button" className="is-danger" onClick={() => deleteTask(task.id)}>Delete Task</button> : null}
             </>
           )}
       </div>,

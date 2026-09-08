@@ -8,6 +8,7 @@ import { CalendarOverview } from "../../components/dashboard/CalendarOverview";
 import { FinancialOverview } from "../../components/dashboard/FinancialOverview";
 import { FirmSnapshot } from "../../components/dashboard/FirmSnapshot";
 import { TodaysOverview } from "../../components/dashboard/TodaysOverview";
+import { formatViloDate } from "../../lib/dateFormat";
 
 function fmtCurrency(value) {
   const n = Number(value || 0);
@@ -15,10 +16,7 @@ function fmtCurrency(value) {
 }
 
 function fmtShortDate(value) {
-  if (!value) return "-";
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return "-";
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  return formatViloDate(value);
 }
 
 function taskHref(task) {

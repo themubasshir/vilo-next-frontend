@@ -44,6 +44,7 @@ VALID_VISIBILITY = {"internal", "client_visible"}
 STORAGE_ROOT = Path("backend/storage/documents")
 DOCX_MIME_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 DOCX_WARNING = "Editing DOCX content creates a new version. Original uploaded file remains in version history."
+CLIENT_ID_CATEGORY = "client_id"
 ONLYOFFICE_CALLBACK_SUCCESS = {"error": 0}
 ONLYOFFICE_SAVE_STATUSES = {2, 6}
 
@@ -480,6 +481,7 @@ async def query_documents(
     created_from: date | None = None,
     created_to: date | None = None,
     visibility: str | None = None,
+    exclude_client_ids: bool = False,
     sort_by: str = "updated",
     page: int = 1,
     per_page: int = 10,
@@ -494,6 +496,8 @@ async def query_documents(
         Document.organization_id == current_user.organization_id,
         accessible_document_condition(current_user),
     ]
+    if exclude_client_ids:
+        filters.append(or_(Document.category.is_(None), Document.category != CLIENT_ID_CATEGORY))
     if document_id is not None:
         filters.append(Document.id == document_id)
     if case_id is not None:

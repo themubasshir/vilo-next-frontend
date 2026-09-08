@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { apiDownload, apiRequest, apiUpload } from "../../../lib/api";
 import { getCachedUser } from "../../../lib/auth";
 import ProtectedFilePreviewModal, { useProtectedFilePreview } from "../../../components/ProtectedFilePreviewModal";
+import { formatViloDate, formatViloDateTime } from "../../../lib/dateFormat";
 
 const PRACTICE_TABS = [
   { value: "", label: "All Precedents" },
@@ -61,26 +62,11 @@ const COPY_INITIAL = {
 };
 
 function formatRelativeDate(value) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "recently";
-
-  const diffMs = Date.now() - date.getTime();
-  const dayMs = 24 * 60 * 60 * 1000;
-  const days = Math.max(0, Math.floor(diffMs / dayMs));
-
-  if (days === 0) return "today";
-  if (days === 1) return "1 day ago";
-  if (days < 30) return `${days} days ago`;
-
-  const months = Math.floor(days / 30);
-  if (months === 1) return "1 month ago";
-  return `${months} months ago`;
+  return formatViloDate(value, "Unknown");
 }
 
 function formatDateTime(value) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "Unknown";
-  return date.toLocaleString();
+  return formatViloDateTime(value, "Unknown");
 }
 
 function formatPracticeArea(value) {
@@ -517,22 +503,6 @@ export default function PrecedentsPage() {
     }
   }
 
-  async function handleArchive() {
-    if (!detail) return;
-    const confirmed = window.confirm("Archive this precedent? Existing case copies will not change.");
-    if (!confirmed) return;
-
-    setDetailError("");
-    try {
-      await apiRequest(`/api/v1/precedents/${detail.id}/archive`, { method: "POST" });
-      await refreshList();
-      setSuccess("Precedent archived.");
-      closeDetailModal();
-    } catch (err) {
-      setDetailError(err.message || "Failed to archive precedent");
-    }
-  }
-
   async function handleEdit(event) {
     event.preventDefault();
     if (!detail) return;
@@ -845,7 +815,6 @@ export default function PrecedentsPage() {
                   {canManage ? (
                     <div className="precedents-modal__actions-group">
                       <button type="button" className="vilo-btn vilo-btn--secondary" onClick={() => setEditOpen(true)}>Edit Master</button>
-                      {!detail.is_archived ? <button type="button" className="vilo-btn vilo-btn--danger" onClick={handleArchive}>Archive</button> : null}
                     </div>
                   ) : null}
                 </div>

@@ -230,7 +230,14 @@ button {
 }
 
 .dashboard-navbar__icon-button.is-notification {
+  width: 2.5rem;
+  height: 2.5rem;
   margin-right: 0.15rem;
+}
+
+.dashboard-navbar__icon-button.is-notification svg {
+  width: 1.5rem;
+  height: 1.5rem;
 }
 
 .dashboard-navbar__notifications {
@@ -454,10 +461,10 @@ button {
 
 .dashboard-navbar__alert-dot {
   position: absolute;
-  top: -0.1rem;
-  right: -0.08rem;
-  width: 0.42rem;
-  height: 0.42rem;
+  top: 0.18rem;
+  right: 0.16rem;
+  width: 0.65rem;
+  height: 0.65rem;
   border: 2px solid #fff;
   border-radius: 999px;
   background: #ff4c51;

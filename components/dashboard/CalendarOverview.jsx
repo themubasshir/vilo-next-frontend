@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import Link from "next/link";
 import { createCardVariants, createHoverLift, createItemVariants } from "../motion";
+import { formatViloDate } from "../../lib/dateFormat";
 
 const dayLabels = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
 
@@ -20,7 +21,7 @@ function formatMonthLabel(date) {
 }
 
 function formatSelectedDate(date) {
-  return date.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+  return formatViloDate(date);
 }
 
 function formatDateKey(date) {

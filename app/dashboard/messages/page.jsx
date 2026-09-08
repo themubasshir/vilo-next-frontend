@@ -4,6 +4,7 @@ import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { apiRequest } from "../../../lib/api";
+import { formatViloDate } from "../../../lib/dateFormat";
 
 const initialForm = {
   conversation_type: "internal",
@@ -19,7 +20,7 @@ function formatConversationTime(value) {
   const sameDay = date.toDateString() === now.toDateString();
   return sameDay
     ? date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
-    : date.toLocaleDateString([], { month: "short", day: "numeric" });
+    : formatViloDate(date, "");
 }
 
 function formatBubbleTime(value) {
@@ -35,7 +36,7 @@ function formatDayLabel(value) {
   if (Number.isNaN(date.getTime())) return "";
   const now = new Date();
   if (date.toDateString() === now.toDateString()) return "Today";
-  return date.toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" });
+  return formatViloDate(date, "");
 }
 
 function sameDay(left, right) {

@@ -8,12 +8,10 @@ import ClientIntakeModal from "../../../../components/dashboard/ClientIntakeModa
 import ProtectedFilePreviewModal, { useProtectedFilePreview } from "../../../../components/ProtectedFilePreviewModal";
 import OnlyOfficeDocumentModal from "../../../../components/OnlyOfficeDocumentModal";
 import { getDocumentViewerType } from "../../../../lib/documentViewer";
+import { formatViloDate, formatViloDateTime } from "../../../../lib/dateFormat";
 
 function formatDate(value) {
-  if (!value) return "-";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  return formatViloDate(value);
 }
 
 function formatMoney(value, currency = "USD") {
@@ -910,7 +908,7 @@ export default function ClientDetailPage() {
                         <tr key={row.id}>
                           <td>v{row.version_number}</td>
                           <td>{row.file_name}</td>
-                          <td>{new Date(row.created_at).toLocaleString()}</td>
+                          <td>{formatViloDateTime(row.created_at)}</td>
                           <td>{row.notes || "-"}</td>
                           <td><button type="button" className="vilo-btn vilo-btn--ghost vilo-btn--xs" onClick={() => apiDownload(`/api/v1/documents/${versionTarget.id}/versions/${row.id}/download`)}>Download</button></td>
                         </tr>
