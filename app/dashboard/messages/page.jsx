@@ -3,7 +3,9 @@
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { apiRequest } from "../../../lib/api";
+import DocumentFileSelection, { formatAttachmentSize } from "../../../components/DocumentFileSelection";
+import ProtectedFilePreviewModal, { useProtectedFilePreview } from "../../../components/ProtectedFilePreviewModal";
+import { apiRequest, apiUpload, apiDownload } from "../../../lib/api";
 import { formatViloDate } from "../../../lib/dateFormat";
 
 const initialForm = {
@@ -163,6 +165,12 @@ function MessagesPageContent() {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("all");
   const [messageBody, setMessageBody] = useState("");
+  const [attachmentDrafts, setAttachmentDrafts] = useState({});
+  const attachments = attachmentDrafts[selected?.id] || [];
+  const setAttachments = (files) => setAttachmentDrafts((current) => ({ ...current, [selected.id]: files }));
+  const [firstAttachments, setFirstAttachments] = useState([]);
+  const [pendingConversation, setPendingConversation] = useState(null);
+  const { preview, openPreview, closePreview } = useProtectedFilePreview();
   const [composerRefs, setComposerRefs] = useState([]);
   const [caseSearch, setCaseSearch] = useState("");
   const [caseSearchRows, setCaseSearchRows] = useState([]);
@@ -478,9 +486,12 @@ function MessagesPageContent() {
     updateRoute({ create: 1 });
   }
 
-  function closeCreateModal() {
+  function closeCreateModal(force = false) {
+    if (creating && force !== true) return;
     setShowCreateModal(false);
     setForm(initialForm);
+    setFirstAttachments([]);
+    setPendingConversation(null);
     setSelectedCase(null);
     setCreateParticipants([]);
     setParticipantQuery("");
@@ -525,7 +536,7 @@ function MessagesPageContent() {
     setCreateError("");
 
     const participantIds = createParticipants.map((user) => Number(user.id));
-    if (!form.title.trim() || !form.first_message.trim() || !participantIds.length) {
+    if (!form.title.trim() || (!form.first_message.trim() && !firstAttachments.length) || !participantIds.length) {
       setCreateError("Conversation title, participants, and first message are required.");
       return;
     }
@@ -536,7 +547,7 @@ function MessagesPageContent() {
 
     setCreating(true);
     try {
-      const created = await apiRequest("/api/v1/conversations", {
+      const created = pendingConversation || await apiRequest("/api/v1/conversations", {
         method: "POST",
         body: JSON.stringify({
           conversation_type: form.conversation_type,
@@ -546,27 +557,22 @@ function MessagesPageContent() {
         }),
       });
 
+      setPendingConversation(created);
       try {
-        await apiRequest(`/api/v1/conversations/${created.id}/messages`, {
-          method: "POST",
-          body: JSON.stringify({
-            body: form.first_message.trim(),
-            case_reference_ids: [],
-          }),
-        });
+        await sendMessageRequest(created.id, form.first_message.trim(), [], firstAttachments);
       } catch (err) {
         await loadConversations(created.id);
         setSelected(created);
         setMessages([]);
-        setCreateError("Conversation created, but the first message failed to send. Open the thread and resend it.");
+        setCreateError(`Conversation created, but the message was not sent: ${err.message || "Upload failed"}. Retry to send to the same conversation.`);
         setCreating(false);
         return;
       }
 
-      await loadConversations(created.id);
       setSelected(created);
-      closeCreateModal();
+      closeCreateModal(true);
       updateRoute({ conversation: created.id });
+      await loadConversations(created.id);
     } catch (err) {
       setCreateError(err.message || "Failed to create conversation");
     } finally {
@@ -574,20 +580,31 @@ function MessagesPageContent() {
     }
   }
 
+  async function sendMessageRequest(conversationId, body, references, files) {
+    if (!files.length) return apiRequest(`/api/v1/conversations/${conversationId}/messages`, {
+      method: "POST", body: JSON.stringify({ body, case_reference_ids: references }),
+    });
+    const data = new FormData();
+    data.append("body", body);
+    references.forEach((id) => data.append("case_reference_ids", String(id)));
+    files.forEach((file) => data.append("files", file));
+    return apiUpload(`/api/v1/conversations/${conversationId}/messages-with-attachments`, data);
+  }
+
+  async function downloadAttachment(attachment) {
+    try { await apiDownload(`/api/v1/conversations/attachments/${attachment.id}/download`); }
+    catch (err) { setSendError(err.message || "Download failed"); }
+  }
+
   async function sendMessage(event) {
     event.preventDefault();
-    if (!selected?.id || !messageBody.trim() || sending) return;
+    if (!selected?.id || (!messageBody.trim() && !attachments.length) || sending) return;
     setSending(true);
     setError("");
     setSendError("");
     try {
-      await apiRequest(`/api/v1/conversations/${selected.id}/messages`, {
-        method: "POST",
-        body: JSON.stringify({
-          body: messageBody.trim(),
-          case_reference_ids: composerRefs.map((caseRow) => caseRow.id),
-        }),
-      });
+      await sendMessageRequest(selected.id, messageBody.trim(), composerRefs.map((row) => row.id), attachments);
+      setAttachments([]);
       setMessageBody("");
       setComposerRefs([]);
       await loadConversations(selected.id);
@@ -606,7 +623,7 @@ function MessagesPageContent() {
     }
   }
 
-  const createDisabled = !form.title.trim() || !form.first_message.trim() || !createParticipants.length || (form.conversation_type === "client" && !selectedCase?.id) || creating;
+  const createDisabled = !form.title.trim() || (!form.first_message.trim() && !firstAttachments.length) || !createParticipants.length || (form.conversation_type === "client" && !selectedCase?.id) || creating;
 
   return (
     <section className="dashboard-page-stack">
@@ -662,7 +679,7 @@ function MessagesPageContent() {
                         {conv.case_title || titleCase(conv.conversation_type)} · {conv.participant_count || 0} participant{conv.participant_count === 1 ? "" : "s"}
                       </span>
                       <span className="messages-conversation-item__bottom">
-                        <span className="messages-conversation-item__preview">{conv.latest_message?.body || "No messages yet"}</span>
+                        <span className="messages-conversation-item__preview">{conv.latest_message?.body || (conv.latest_message?.attachments?.length ? `${conv.latest_message.attachments.length} attachment${conv.latest_message.attachments.length === 1 ? "" : "s"}` : "No messages yet")}</span>
                         {conv.unread_count > 0 ? <em>{conv.unread_count} new</em> : null}
                       </span>
                     </span>
@@ -730,7 +747,17 @@ function MessagesPageContent() {
                         <div className={`message-bubble-row${mine ? " is-mine" : ""}`}>
                           <div className={`message-bubble${mine ? " is-mine" : ""}`}>
                             {showSender ? <small className="message-bubble__sender">{msg.sender_name || "User"}</small> : null}
-                            <p>{msg.body}</p>
+                            {msg.body ? <p>{msg.body}</p> : null}
+                            {msg.attachments?.length ? <div className="message-attachments">
+                              {msg.attachments.map((attachment) => <div key={attachment.id} className="message-attachment">
+                                <strong title={attachment.file_name}>{attachment.file_name}</strong>
+                                <small>{formatAttachmentSize(attachment.file_size)}</small>
+                                <div className="vilo-table-actions">
+                                  {["application/pdf", "image/jpeg", "image/png"].includes(attachment.file_type) ? <button type="button" className="vilo-btn vilo-btn--secondary vilo-btn--xs" onClick={() => openPreview({ path: `/api/v1/conversations/attachments/${attachment.id}/view`, downloadPath: `/api/v1/conversations/attachments/${attachment.id}/download`, filename: attachment.file_name })}>View</button> : null}
+                                  <button type="button" className="vilo-btn vilo-btn--secondary vilo-btn--xs" onClick={() => downloadAttachment(attachment)}>Download</button>
+                                </div>
+                              </div>)}
+                            </div> : null}
                             {msg.case_references?.length ? (
                               <div className="message-bubble__refs">
                                 {msg.case_references.map((ref) => (
@@ -750,6 +777,7 @@ function MessagesPageContent() {
                 </div>
 
                 <form className="messages-thread__composer" onSubmit={sendMessage}>
+                  <DocumentFileSelection key={selected.id} files={attachments} onChange={setAttachments} disabled={sending} maxFiles={5} compact label="message attachments"><PaperclipIcon /><span>Attach documents</span></DocumentFileSelection>
                   {composerRefs.length ? (
                     <div className="message-composer-refs">
                       {composerRefs.map((row) => (
@@ -767,7 +795,7 @@ function MessagesPageContent() {
                         value={messageBody}
                         onChange={(event) => setMessageBody(event.target.value)}
                         onKeyDown={onComposerKeyDown}
-                        required
+                        disabled={sending}
                       />
                       <div className="messages-composer__tools">
                         <div className="messages-composer__hint">
@@ -782,12 +810,11 @@ function MessagesPageContent() {
                             if (!caseSearchRows.length) await searchCases("");
                           }}
                         >
-                          <PaperclipIcon />
                           <span>Link Case</span>
                         </button>
                       </div>
                     </div>
-                    <button type="submit" className="vilo-btn vilo-btn--primary messages-send-button" disabled={sending || !messageBody.trim()}>
+                    <button type="submit" className="vilo-btn vilo-btn--primary messages-send-button" disabled={sending || (!messageBody.trim() && !attachments.length)}>
                       <SendIcon />
                       <span>{sending ? "Sending..." : "Send"}</span>
                     </button>
@@ -816,6 +843,7 @@ function MessagesPageContent() {
                   </p>
                 ) : null}
 
+                <fieldset className="messages-conversation-fields" disabled={creating || Boolean(pendingConversation)}>
                 <section className="messages-create-section">
                   <div className="messages-create-section__head">
                     <strong>Conversation details</strong>
@@ -835,9 +863,10 @@ function MessagesPageContent() {
                   </div>
                   <input
                     placeholder="Conversation title"
+                    required
                     value={form.title}
                     onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))}
-                    required
+                    disabled={creating}
                   />
                 </section>
 
@@ -922,18 +951,20 @@ function MessagesPageContent() {
                   </div>
                 </section>
 
+                </fieldset>
                 <section className="messages-create-section">
                   <div className="messages-create-section__head">
                     <strong>First message</strong>
-                    <span>This is required and will open the new thread immediately after creation.</span>
+                    <span>Add text or attach a document to start the thread.</span>
                   </div>
                   <textarea
                     ref={firstMessageRef}
                     placeholder="Write the first message"
                     value={form.first_message}
                     onChange={(event) => setForm((current) => ({ ...current, first_message: event.target.value }))}
-                    required
+                    disabled={creating}
                   />
+                  <DocumentFileSelection files={firstAttachments} onChange={setFirstAttachments} disabled={creating} maxFiles={5} compact label="first message attachments"><PaperclipIcon /><span>Attach documents</span></DocumentFileSelection>
                 </section>
                 </div>
               </div>
@@ -944,7 +975,7 @@ function MessagesPageContent() {
                 <div className="messages-create-form__footer">
                   <button type="button" className="vilo-btn vilo-btn--secondary" onClick={closeCreateModal}>Cancel</button>
                   <button type="submit" className="vilo-btn vilo-btn--primary" disabled={createDisabled}>
-                    {creating ? "Creating..." : "Create Conversation"}
+                    {creating ? "Sending..." : pendingConversation ? "Retry Message" : "Create Conversation"}
                   </button>
                 </div>
               </div>
@@ -952,6 +983,8 @@ function MessagesPageContent() {
           </div>
         </div>
       ) : null}
+
+      <ProtectedFilePreviewModal preview={preview} onClose={closePreview} />
 
       {showCasePicker ? (
         <div className="vilo-modal-overlay" onClick={() => setShowCasePicker(false)}>

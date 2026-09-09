@@ -10,6 +10,7 @@ from app.api.v1 import clients, notifications
 from app.db.base import Base
 from app.models.calendar_event import CalendarEvent
 from app.models.task import Task
+from app.models.message_attachment import MessageAttachment
 from app.models.case import CaseAssignment
 from app.models.client import Client, ClientAssignment
 from app.models.conversation import Conversation, ConversationParticipant, Message
@@ -28,7 +29,7 @@ async def messaging(workflow, monkeypatch, tmp_path):
     async with sessions() as db:
         connection = await db.connection()
         await connection.run_sync(lambda sync: Base.metadata.create_all(sync, tables=[
-            model.__table__ for model in (Conversation, ConversationParticipant, Message, MessageCaseReference, Task, CalendarEvent)
+            model.__table__ for model in (Conversation, ConversationParticipant, Message, MessageAttachment, MessageCaseReference, Task, CalendarEvent)
         ]))
         now = datetime.now(timezone.utc)
         for uid, org, role in ((4, 1, UserRole.paralegal), (5, 2, UserRole.paralegal), (6, 1, UserRole.client)):

@@ -9827,3 +9827,12 @@ button {
 .document-selection-row > span { flex: 1 1 10rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .document-selection-row > small { white-space: nowrap; }
 .document-file-selection .vilo-form-error { overflow-wrap: anywhere; }
+
+.message-attachments { display: grid; gap: 0.5rem; margin-top: 0.35rem; min-width: 0; }
+.message-attachment { display: grid; gap: 0.25rem; min-width: 0; max-width: 100%; padding: 0.5rem; border: 1px solid currentColor; border-radius: 8px; }
+.message-attachment > strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.messages-thread__composer .document-file-selection { margin-bottom: 0.5rem; }
+.messages-thread__composer .document-selection-list { max-height: 10rem; overflow-y: auto; }
+.messages-composer__tools { flex-wrap: wrap; }
+
+.messages-conversation-fields { display: grid; gap: 1rem; min-width: 0; border: 0; margin: 0; padding: 0; }

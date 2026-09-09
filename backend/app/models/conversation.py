@@ -58,3 +58,5 @@ class Message(Base):
     sender = relationship("User", back_populates="sent_messages")
     parent_message = relationship("Message", remote_side="Message.id")
     case_references = relationship("MessageCaseReference", back_populates="message", cascade="all, delete-orphan")
+
+    attachments = relationship("MessageAttachment", back_populates="message", cascade="all, delete-orphan")

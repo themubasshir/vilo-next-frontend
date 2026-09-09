@@ -36,12 +36,21 @@ class MessageUpdate(BaseModel):
     body: str
 
 
+class MessageAttachmentResponse(BaseModel):
+    id: int
+    file_name: str
+    file_type: str
+    file_size: int
+    created_at: datetime
+
+
 class MessageResponse(BaseModel):
     id: int
     conversation_id: int
     sender_id: int
     parent_message_id: int | None
     body: str
+    attachments: list[MessageAttachmentResponse] = Field(default_factory=list)
     sender_name: str | None = None
     sender_role: str | None = None
     case_references: list["CaseReferenceResponse"] = Field(default_factory=list)

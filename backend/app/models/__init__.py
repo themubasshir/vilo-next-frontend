@@ -25,6 +25,7 @@ from app.models.operating_account import OperatingAccount
 from app.models.operating_transaction import OperatingTransaction
 from app.models.client_intake import ClientIntake
 from app.models.conversation import Conversation, ConversationParticipant, Message
+from app.models.message_attachment import MessageAttachment
 from app.models.message_case_reference import MessageCaseReference
 from app.models.user_invite import UserInvite
 from app.models.notification import Notification
@@ -37,5 +38,5 @@ from app.models.practice_area import PracticeArea
 __all__ = [
     "Organization","User","Client","ClientAssignment","Case","CaseAssignment","Task","CalendarEvent","CaseTimelineEvent",
     "Document","DocumentVersion","Precedent","CaseNote","TimeEntry","Expense","Invoice","InvoicePayment","InvoiceLineItem","FirmPaymentAccount","BillingRate",
-    "TrustAccount","TrustLedger","TrustTransaction","TrustReceipt","TrustReconciliation","OperatingAccount","OperatingTransaction","ClientIntake","ClientIntakeDraft","ClientIntakeDraftAttachment","PracticeArea","Conversation","ConversationParticipant","Message","MessageCaseReference","UserInvite","Notification","AuditLog","ActiveTimer",
+    "TrustAccount","TrustLedger","TrustTransaction","TrustReceipt","TrustReconciliation","OperatingAccount","OperatingTransaction","ClientIntake","ClientIntakeDraft","ClientIntakeDraftAttachment","PracticeArea","Conversation","ConversationParticipant","Message","MessageAttachment","MessageCaseReference","UserInvite","Notification","AuditLog","ActiveTimer",
 ]

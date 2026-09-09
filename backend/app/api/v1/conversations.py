@@ -1,6 +1,9 @@
 from datetime import datetime, timezone
+import logging
+from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status, File, Form, UploadFile
+from fastapi.responses import FileResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -9,6 +12,7 @@ from app.db.session import get_db
 from app.models.case import Case
 from app.models.client import Client
 from app.models.conversation import Conversation, ConversationParticipant, Message
+from app.models.message_attachment import MessageAttachment
 from app.models.message_case_reference import MessageCaseReference
 from app.models.enums import UserRole
 from app.models.user import User
@@ -18,12 +22,15 @@ from app.schemas.conversation import (
     ConversationCreate,
     ConversationResponse,
     ConversationUpdate,
+    MessageAttachmentResponse,
     MessageCreate,
     MessageResponse,
     MessageUpdate,
     ParticipantCreate,
     ParticipantResponse,
 )
+from app.services import message_attachments
+from app.services.document_storage import persist_file, resolve_stored_file
 from app.services.notifications import bulk_create_notifications
 from app.services.timeline import create_case_timeline_event
 
@@ -85,7 +92,20 @@ async def build_case_references(db: AsyncSession, org_id: int, message_id: int) 
     return output
 
 
-async def build_message_response(db: AsyncSession, message: Message) -> MessageResponse:
+async def attachment_metadata(db: AsyncSession, org_id: int, message_ids: list[int]):
+    rows = (await db.scalars(select(MessageAttachment).where(
+        MessageAttachment.organization_id == org_id, MessageAttachment.message_id.in_(message_ids),
+    ).order_by(MessageAttachment.id))).all()
+    result = {}
+    for row in rows:
+        result.setdefault(row.message_id, []).append(MessageAttachmentResponse(
+            id=row.id, file_name=row.file_name, file_type=row.file_type,
+            file_size=row.file_size, created_at=row.created_at,
+        ))
+    return result
+
+
+async def build_message_response(db: AsyncSession, message: Message, attachments=None) -> MessageResponse:
     sender = await db.scalar(select(User).where(User.id == message.sender_id, User.organization_id == message.organization_id))
     sender_role = None
     if sender and getattr(sender, "role", None) is not None:
@@ -99,6 +119,7 @@ async def build_message_response(db: AsyncSession, message: Message) -> MessageR
         sender_name=getattr(sender, "name", None) if sender else None,
         sender_role=sender_role,
         case_references=await build_case_references(db, message.organization_id, message.id),
+        attachments=[] if message.deleted_at else (attachments if attachments is not None else (await attachment_metadata(db, message.organization_id, [message.id])).get(message.id, [])),
         created_at=message.created_at,
         updated_at=message.updated_at,
         deleted_at=message.deleted_at,
@@ -369,8 +390,7 @@ async def remove_participant(conversation_id: int, user_id: int, db: AsyncSessio
     return {"ok": True}
 
 
-@router.post("/{conversation_id}/messages", response_model=MessageResponse)
-async def create_message(conversation_id: int, payload: MessageCreate, db: AsyncSession = Depends(get_db), current_user: User = Depends(role_guard(ALLOWED_STAFF))):
+async def create_message_core(conversation_id: int, payload: MessageCreate, db: AsyncSession, current_user: User, *, has_attachments=False):
     await require_participant(db, current_user.organization_id, conversation_id, current_user.id)
     if payload.parent_message_id is not None:
         parent = await db.scalar(
@@ -383,6 +403,8 @@ async def create_message(conversation_id: int, payload: MessageCreate, db: Async
         if not parent:
             raise HTTPException(status_code=400, detail="Parent message not found")
 
+    if not payload.body.strip() and not has_attachments:
+        raise HTTPException(400, "Message text or an attachment is required")
     now = datetime.now(timezone.utc)
     msg = Message(
         organization_id=current_user.organization_id,
@@ -431,9 +453,85 @@ async def create_message(conversation_id: int, payload: MessageCreate, db: Async
         body=current_user.name,
         metadata_json={"conversation_id": conversation_id, "message_id": msg.id, "conversation_title": conv.title},
     )
+    return msg
+
+
+@router.post("/{conversation_id}/messages", response_model=MessageResponse)
+async def create_message(conversation_id: int, payload: MessageCreate, db: AsyncSession = Depends(get_db), current_user: User = Depends(role_guard(ALLOWED_STAFF))):
+    msg = await create_message_core(conversation_id, payload, db, current_user)
     await db.commit()
     await db.refresh(msg)
-    return await build_message_response(db, msg)
+    return await build_message_response(db, msg, attachments=[])
+
+
+@router.post("/{conversation_id}/messages-with-attachments", response_model=MessageResponse)
+async def create_message_with_attachments(
+    conversation_id: int,
+    body: str = Form(default=""),
+    parent_message_id: int | None = Form(default=None),
+    case_reference_ids: list[int] = Form(default=[]),
+    files: list[UploadFile] = File(default=[]),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(role_guard(ALLOWED_STAFF)),
+):
+    await get_conversation_or_404(db, current_user.organization_id, conversation_id)
+    await require_participant(db, current_user.organization_id, conversation_id, current_user.id)
+    if len(files) > message_attachments.MAX_MESSAGE_ATTACHMENTS:
+        raise HTTPException(400, "Maximum 5 attachments per message")
+    validated = [await message_attachments.validate_attachment(file) for file in files]
+    created_paths = []
+    try:
+        msg = await create_message_core(conversation_id, MessageCreate(
+            body=body, parent_message_id=parent_message_id, case_reference_ids=case_reference_ids,
+        ), db, current_user, has_attachments=bool(validated))
+        for name, media_type, data in validated:
+            path, _ = persist_file(message_attachments.STORAGE_ROOT, current_user.organization_id, name, data)
+            created_paths.append(path)
+            db.add(MessageAttachment(
+                organization_id=current_user.organization_id, message_id=msg.id, uploaded_by=current_user.id,
+                file_name=name, file_path=path, file_type=media_type, file_size=len(data), created_at=msg.created_at,
+            ))
+        await db.flush()
+        response = await build_message_response(db, msg)
+        await db.commit()
+    except Exception:
+        try:
+            await db.rollback()
+        finally:
+            for path in created_paths:
+                try:
+                    Path(path).unlink(missing_ok=True)
+                except OSError:
+                    logging.getLogger(__name__).warning("Could not remove a failed message upload")
+        raise
+    return response
+
+
+async def attachment_file(attachment_id: int, db: AsyncSession, current_user: User, *, inline: bool):
+    row = await db.scalar(select(MessageAttachment).join(Message, Message.id == MessageAttachment.message_id).where(
+        MessageAttachment.id == attachment_id, MessageAttachment.organization_id == current_user.organization_id,
+        Message.organization_id == current_user.organization_id, Message.deleted_at.is_(None),
+    ))
+    if not row:
+        raise HTTPException(404, "Attachment not found")
+    msg = await db.scalar(select(Message).where(Message.id == row.message_id, Message.organization_id == current_user.organization_id))
+    await get_conversation_or_404(db, current_user.organization_id, msg.conversation_id)
+    await require_participant(db, current_user.organization_id, msg.conversation_id, current_user.id)
+    path = resolve_stored_file(row.file_path, message_attachments.STORAGE_ROOT)
+    can_preview = row.file_type in {"application/pdf", "image/jpeg", "image/png"}
+    return FileResponse(path, media_type=row.file_type, filename=row.file_name,
+        content_disposition_type="inline" if inline and can_preview else "attachment",
+        headers={"X-Content-Type-Options": "nosniff", "Cache-Control": "private, no-store"})
+
+
+@router.get("/attachments/{attachment_id}/view")
+async def view_attachment(attachment_id: int, db: AsyncSession = Depends(get_db), current_user: User = Depends(role_guard(ALLOWED_STAFF))):
+    return await attachment_file(attachment_id, db, current_user, inline=True)
+
+
+@router.get("/attachments/{attachment_id}/download")
+async def download_attachment(attachment_id: int, db: AsyncSession = Depends(get_db), current_user: User = Depends(role_guard(ALLOWED_STAFF))):
+    return await attachment_file(attachment_id, db, current_user, inline=False)
 
 
 @router.get("/{conversation_id}/messages", response_model=list[MessageResponse])
@@ -450,7 +548,8 @@ async def list_messages(conversation_id: int, db: AsyncSession = Depends(get_db)
             .order_by(Message.created_at.asc())
         )
     ).all()
-    return [await build_message_response(db, m) for m in rows]
+    attachments = await attachment_metadata(db, current_user.organization_id, [m.id for m in rows]) if rows else {}
+    return [await build_message_response(db, m, attachments=attachments.get(m.id, [])) for m in rows]
 
 
 @router.patch("/messages/{message_id}", response_model=MessageResponse)
