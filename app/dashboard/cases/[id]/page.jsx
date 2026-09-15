@@ -12,6 +12,8 @@ import ProtectedFilePreviewModal, { useProtectedFilePreview } from "../../../../
 import { getDocumentEditMode, getDocumentViewerType } from "../../../../lib/documentViewer";
 import { formatViloDate, formatViloDateTime } from "../../../../lib/dateFormat";
 import ViloDateInput from "../../../../components/ViloDateInput";
+import { getCachedUser } from "../../../../lib/auth";
+import { combineTaskDueDateTime } from "../../../../lib/taskDueDateTime";
 
 const TABS = ["timeline", "notes", "tasks", "documents", "team"];
 const EVENT_TYPES = ["milestone", "hearing", "filing", "call", "meeting", "note"];
@@ -73,6 +75,7 @@ export default function CaseDetailPage() {
   const [team, setTeam] = useState([]);
   const [tasks, setTasks] = useState([]);
   const [documents, setDocuments] = useState([]);
+  const [currentUser, setCurrentUser] = useState(getCachedUser());
   const [wordTarget, setWordTarget] = useState(null);
   const [textTarget, setTextTarget] = useState(null);
   const [textContent, setTextContent] = useState("");
@@ -100,9 +103,18 @@ export default function CaseDetailPage() {
   const [replaceNotes, setReplaceNotes] = useState("");
   const [versionRows, setVersionRows] = useState([]);
   const [noteForm, setNoteForm] = useState({ note: "", visibility: "internal" });
-  const [taskForm, setTaskForm] = useState({ title: "", description: "", status: "pending", priority: "medium", due_date: "", assigned_to: "" });
+  const [taskForm, setTaskForm] = useState({ title: "", description: "", status: "pending", priority: "medium", due_date: "", due_time: "", assigned_to: "" });
   const [docForm, setDocForm] = useState({ title: "", description: "", category: "", visibility: "internal", file: null });
   const [selectedTeamIds, setSelectedTeamIds] = useState([]);
+  const canDeleteCaseDocument = currentUser?.role === "admin" || currentUser?.role === "partner";
+
+  useEffect(() => {
+    function handleUserUpdated(event) {
+      setCurrentUser(event.detail || getCachedUser());
+    }
+    window.addEventListener("vilo:user-updated", handleUserUpdated);
+    return () => window.removeEventListener("vilo:user-updated", handleUserUpdated);
+  }, []);
 
   async function load() {
     setLoading(true);
@@ -271,10 +283,10 @@ export default function CaseDetailPage() {
           ...taskForm,
           case_id: Number(id),
           assigned_to: taskForm.assigned_to ? Number(taskForm.assigned_to) : null,
-          due_date: taskForm.due_date || null,
+          due_date: combineTaskDueDateTime(taskForm.due_date, taskForm.due_time),
         }),
       });
-      setTaskForm({ title: "", description: "", status: "pending", priority: "medium", due_date: "", assigned_to: "" });
+      setTaskForm({ title: "", description: "", status: "pending", priority: "medium", due_date: "", due_time: "", assigned_to: "" });
       setModalType("");
       await load();
     } catch (err) {
@@ -381,6 +393,25 @@ export default function CaseDetailPage() {
       await apiDownload(`/api/v1/documents/${documentId}/download`);
     } catch (err) {
       setError(err.message || "Download failed");
+    }
+  }
+
+  async function deleteDocument() {
+    if (!selectedDocument) return;
+    setSubmitting(true);
+    setError("");
+    setDocumentMessage("");
+    try {
+      const deletedId = selectedDocument.id;
+      await apiRequest(`/api/v1/documents/${deletedId}`, { method: "DELETE" });
+      setDocuments((current) => current.filter((doc) => Number(doc.id) !== Number(deletedId)));
+      setModalType("");
+      setSelectedDocument(null);
+      setDocumentMessage("Document deleted successfully.");
+    } catch (err) {
+      setError(err.message || "Failed to delete document");
+    } finally {
+      setSubmitting(false);
     }
   }
 
@@ -678,6 +709,7 @@ export default function CaseDetailPage() {
                                 <button type="button" className="vilo-btn vilo-btn--secondary vilo-btn--xs" onClick={() => downloadDocument(doc.id)}>Download</button>
                                 <button type="button" className="vilo-btn vilo-btn--ghost vilo-btn--xs" onClick={() => { setSelectedDocument(doc); setModalType("replace-document"); }}>Replace</button>
                                 <button type="button" className="vilo-btn vilo-btn--ghost vilo-btn--xs" onClick={() => openVersionHistory(doc)}>Versions</button>
+                                {canDeleteCaseDocument ? <button type="button" className="vilo-btn vilo-btn--danger vilo-btn--xs" onClick={() => { setSelectedDocument(doc); setModalType("delete-document"); }}>Delete</button> : null}
                               </div>
                             </td>
                           </tr>
@@ -882,8 +914,11 @@ export default function CaseDetailPage() {
               </select>
             </div>
             <div className="vilo-form-row-two">
-              <ViloDateInput value={taskForm.due_date} onChange={(value) => setTaskForm((p) => ({ ...p, due_date: value }))} />
-              <select value={taskForm.assigned_to} onChange={(e) => setTaskForm((p) => ({ ...p, assigned_to: e.target.value }))}>
+              <label><span>Due Date</span><ViloDateInput value={taskForm.due_date} onChange={(value) => setTaskForm((p) => ({ ...p, due_date: value }))} required /></label>
+              <label><span>Due Time (optional)</span><input type="time" value={taskForm.due_time} onChange={(e) => setTaskForm((p) => ({ ...p, due_time: e.target.value }))} /></label>
+            </div>
+            <div className="vilo-form-row-two">
+              <select value={taskForm.assigned_to} onChange={(e) => setTaskForm((p) => ({ ...p, assigned_to: e.target.value }))} required>
                 <option value="">Unassigned</option>
                 {team.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
               </select>
@@ -931,6 +966,18 @@ export default function CaseDetailPage() {
             <textarea placeholder="Version notes (optional)" value={replaceNotes} onChange={(e) => setReplaceNotes(e.target.value)} />
             <button className="vilo-btn vilo-btn--primary" type="submit" disabled={submitting}>{submitting ? "Replacing..." : "Replace Document"}</button>
           </form>
+        </Modal>
+      ) : null}
+
+      {modalType === "delete-document" && selectedDocument ? (
+        <Modal title={`Delete “${selectedDocument.title}”?`} onClose={() => { if (!submitting) { setModalType(""); setSelectedDocument(null); } }}>
+          <div className="vilo-form-grid">
+            <p>Are you sure you want to delete this document from this case/file? This action cannot be undone.</p>
+            <div className="vilo-modal__footer">
+              <button className="vilo-btn vilo-btn--secondary" type="button" onClick={() => { setModalType(""); setSelectedDocument(null); }} disabled={submitting}>Cancel</button>
+              <button className="vilo-btn vilo-btn--danger" type="button" onClick={deleteDocument} disabled={submitting}>{submitting ? "Deleting..." : "Delete Document"}</button>
+            </div>
+          </div>
         </Modal>
       ) : null}
 

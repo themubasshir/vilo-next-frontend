@@ -484,18 +484,31 @@ def test_mark_complete_endpoint():
         cleanup(client)
 
 
-def test_archive_endpoint_and_active_list_behavior():
+def test_archive_endpoint_is_removed_and_active_list_behavior_is_unchanged():
     existing = task_obj(archived_at=None)
     db = TaskDBStub(scalar_values=[existing], scalars_rows=[[existing]])
     client = build_client("partner", db)
     try:
         archive_res = client.post("/api/v1/tasks/5/archive")
-        assert archive_res.status_code == 200
-        assert archive_res.json()["archived_at"] is not None
+        assert archive_res.status_code in {404, 405}
+        assert existing.archived_at is None
 
         list_res = client.get("/api/v1/tasks")
         assert list_res.status_code == 200
         assert "tasks.archived_at IS NULL" in db.scalars_queries[-1]
+    finally:
+        cleanup(client)
+
+
+def test_patch_archived_at_is_rejected_without_mutation():
+    existing = task_obj(archived_at=None)
+    db = TaskDBStub(scalar_values=[existing])
+    client = build_client("admin", db)
+    try:
+        response = client.patch("/api/v1/tasks/5", json={"archived_at": "2026-09-20T09:00:00Z"})
+        assert response.status_code == 422
+        assert existing.archived_at is None
+        assert db.commits == 0
     finally:
         cleanup(client)
 

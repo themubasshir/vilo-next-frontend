@@ -437,36 +437,6 @@ async def view_precedent(
     )
 
 
-@router.post("/{precedent_id}/archive", response_model=PrecedentResponse)
-async def archive_precedent(
-    precedent_id: int,
-    request: Request,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(role_guard(MANAGE_ROLES)),
-):
-    precedent = await get_precedent_or_404(db, precedent_id, current_user.organization_id)
-    now = datetime.now(timezone.utc)
-    precedent.is_archived = True
-    precedent.archived_at = now
-    precedent.updated_at = now
-    precedent.updated_by_id = current_user.id
-
-    await log_audit_event(
-        db,
-        organization_id=current_user.organization_id,
-        user_id=current_user.id,
-        action="precedent_archived",
-        entity_type="precedent",
-        entity_id=str(precedent.id),
-        description=f"Precedent archived: {precedent.name}",
-        ip_address=request.client.host if request.client else None,
-        user_agent=request.headers.get("user-agent"),
-    )
-    await db.commit()
-    precedent = await get_precedent_or_404(db, precedent.id, current_user.organization_id)
-    return serialize_precedent(precedent, include_content=True)
-
-
 @router.delete("/{precedent_id}")
 async def delete_precedent(
     precedent_id: int,

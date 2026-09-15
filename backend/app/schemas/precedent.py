@@ -1,6 +1,6 @@
 from datetime import date, datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.schemas.document import DocumentResponse
 
@@ -15,6 +15,8 @@ class PrecedentCreate(BaseModel):
 
 
 class PrecedentUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     name: str | None = None
     description: str | None = None
     practice_area: str | None = None

@@ -182,7 +182,6 @@ export default function PrecedentsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
   const [sortBy, setSortBy] = useState("updated_at");
-  const [includeArchived, setIncludeArchived] = useState(false);
   const [selectedId, setSelectedId] = useState(null);
   const [detail, setDetail] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -282,7 +281,6 @@ export default function PrecedentsPage() {
         if (activeTab) params.set("practice_area", activeTab);
         if (typeFilter) params.set("document_type", typeFilter);
         if (sortBy) params.set("sort", sortBy);
-        if (includeArchived) params.set("include_archived", "true");
         params.set("limit", "120");
         params.set("offset", "0");
 
@@ -304,7 +302,7 @@ export default function PrecedentsPage() {
     return () => {
       cancelled = true;
     };
-  }, [activeTab, canView, currentUser, includeArchived, searchQuery, sortBy, typeFilter]);
+  }, [activeTab, canView, currentUser, searchQuery, sortBy, typeFilter]);
 
   useEffect(() => {
     if (!selectedId) {
@@ -370,7 +368,6 @@ export default function PrecedentsPage() {
     if (activeTab) params.set("practice_area", activeTab);
     if (typeFilter) params.set("document_type", typeFilter);
     if (sortBy) params.set("sort", sortBy);
-    if (includeArchived) params.set("include_archived", "true");
     params.set("limit", "120");
     params.set("offset", "0");
     const data = await apiRequest(`/api/v1/precedents?${params.toString()}`);
@@ -390,7 +387,6 @@ export default function PrecedentsPage() {
     setSearchQuery("");
     setTypeFilter("");
     setSortBy("updated_at");
-    setIncludeArchived(false);
   }
 
   function closeCreateModal() {
@@ -675,10 +671,6 @@ export default function PrecedentsPage() {
             <ChevronDownIcon />
           </label>
 
-          <label className="precedents-toggle">
-            <input type="checkbox" checked={includeArchived} onChange={(event) => setIncludeArchived(event.target.checked)} />
-            <span>Include archived</span>
-          </label>
         </div>
 
         <div className="precedents-results-head precedents-results-head--between">
@@ -714,7 +706,7 @@ export default function PrecedentsPage() {
                 <button
                   key={row.id}
                   type="button"
-                  className={`precedent-card${row.is_archived ? " is-archived" : ""}`}
+                  className="precedent-card"
                   onClick={() => setSelectedId(row.id)}
                   aria-label={`Preview ${row.name}`}
                 >
@@ -804,7 +796,6 @@ export default function PrecedentsPage() {
               <div className="precedents-modal__meta">
                 <span>Created {formatDateTime(detail.created_at)} by {detail.created_by_name || "Unknown"}</span>
                 <span>Updated {formatDateTime(detail.updated_at)}{detail.updated_by_name ? ` by ${detail.updated_by_name}` : ""}</span>
-                {detail.is_archived ? <span>Status: Archived</span> : null}
               </div>
 
               {copiedDocument ? (

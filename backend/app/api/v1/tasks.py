@@ -404,7 +404,7 @@ async def update_task(
     updates = payload.model_dump(exclude_unset=True)
     if current_user.role not in {UserRole.admin, UserRole.partner} and not set(updates).issubset(WORKFLOW_ONLY_FIELDS):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not have permission to edit this task.")
-    reminder_material_fields = {"due_date", "reminder_at", "status", "archived_at", "assigned_to", "case_id", "client_id", "title"}
+    reminder_material_fields = {"due_date", "reminder_at", "status", "assigned_to", "case_id", "client_id", "title"}
     if reminder_material_fields.intersection(updates):
         await suppress_obsolete_reminders(
             db, organization_id=current_user.organization_id, entity="task", entity_id=task.id,
@@ -452,8 +452,6 @@ async def update_task(
         task.notes = updates["notes"]
     if "completed_at" in updates:
         task.completed_at = updates["completed_at"]
-    if "archived_at" in updates:
-        task.archived_at = updates["archived_at"]
 
     if is_completed_status(task.status):
         if task.completed_at is None:
@@ -503,24 +501,6 @@ async def complete_task(
             metadata_json={"task_id": task.id},
         )
 
-    await db.commit()
-    await db.refresh(task)
-    return serialize(task)
-
-
-@router.post("/{task_id}/archive", response_model=TaskResponse)
-async def archive_task(
-    task_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(role_guard(ALLOWED_STAFF)),
-):
-    task = await get_task_or_404(db, current_user.organization_id, task_id)
-    now = datetime.now(timezone.utc)
-    task.archived_at = now
-    task.updated_at = now
-    await suppress_obsolete_reminders(
-        db, organization_id=current_user.organization_id, entity="task", entity_id=task.id, now=now,
-    )
     await db.commit()
     await db.refresh(task)
     return serialize(task)

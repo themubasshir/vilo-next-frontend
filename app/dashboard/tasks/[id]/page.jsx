@@ -5,8 +5,9 @@ import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { apiRequest } from "../../../../lib/api";
 import { getCachedUser } from "../../../../lib/auth";
-import { formatViloDateTime } from "../../../../lib/dateFormat";
+import { formatViloDate, formatViloDateTime } from "../../../../lib/dateFormat";
 import ViloDateInput from "../../../../components/ViloDateInput";
+import { combineTaskDueDateTime, formatTaskDueTime, splitTaskDueDateTime } from "../../../../lib/taskDueDateTime";
 
 const STATUS_OPTIONS = ["not_started", "in_progress", "waiting", "completed"];
 const PRIORITY_OPTIONS = ["low", "medium", "high", "urgent"];
@@ -40,6 +41,7 @@ function toDateTimeLocal(value) {
 }
 
 function buildInitialForm(task) {
+  const due = splitTaskDueDateTime(task?.due_date);
   return {
     client_id: task?.client_id ? String(task.client_id) : "",
     case_id: task?.case_id ? String(task.case_id) : "",
@@ -49,7 +51,9 @@ function buildInitialForm(task) {
     task_type: task?.task_type || "general",
     status: task?.status || "not_started",
     priority: task?.priority || "medium",
-    due_date: toDateTimeLocal(task?.due_date),
+    due_date: due.due_date,
+    due_time: due.due_time,
+    original_due_date: task?.due_date || null,
     reminder_at: toDateTimeLocal(task?.reminder_at),
     notes: task?.notes || "",
   };
@@ -166,6 +170,8 @@ export default function TaskDetailPage() {
 
   async function handleSave(event) {
     event.preventDefault();
+    const originalDue = splitTaskDueDateTime(form.original_due_date);
+    const dueUnchanged = originalDue.due_date === form.due_date && originalDue.due_time === form.due_time;
     const updated = await patchTask({
       client_id: form.client_id ? Number(form.client_id) : null,
       case_id: form.case_id ? Number(form.case_id) : null,
@@ -175,7 +181,7 @@ export default function TaskDetailPage() {
       task_type: form.task_type,
       status: form.status,
       priority: form.priority,
-      due_date: form.due_date ? new Date(form.due_date).toISOString() : null,
+      due_date: dueUnchanged ? form.original_due_date : combineTaskDueDateTime(form.due_date, form.due_time),
       reminder_at: form.reminder_at ? new Date(form.reminder_at).toISOString() : null,
       notes: form.notes.trim() || null,
     }, "Task updated successfully.");
@@ -281,7 +287,8 @@ export default function TaskDetailPage() {
             <div className="task-detail-grid__item"><span>Linked case</span><strong>{linkedCase?.title || "No case linked"}</strong></div>
             <div className="task-detail-grid__item"><span>Assigned user</span><strong>{assignedUser?.name || "Unassigned"}</strong></div>
             <div className="task-detail-grid__item"><span>Task type</span><strong>{normalizeLabel(task.task_type || "general")}</strong></div>
-            <div className="task-detail-grid__item"><span>Due date</span><strong>{formatDateTime(task.due_date)}</strong></div>
+            <div className="task-detail-grid__item"><span>Due Date</span><strong>{formatViloDate(task.due_date)}</strong></div>
+            <div className="task-detail-grid__item"><span>Due Time</span><strong>{formatTaskDueTime(task.due_date)}</strong></div>
             <div className="task-detail-grid__item"><span>Reminder</span><strong>{formatDateTime(task.reminder_at)}</strong></div>
             <div className="task-detail-grid__item"><span>Created by</span><strong>{createdByUser?.name || `User #${task.created_by || "-"}`}</strong></div>
             <div className="task-detail-grid__item"><span>Created</span><strong>{formatDateTime(task.created_at)}</strong></div>
@@ -379,12 +386,20 @@ export default function TaskDetailPage() {
                 </div>
 
                 <div className="vilo-form-row-two">
-                  <ViloDateInput
-                    includeTime
-                    value={form.due_date}
-                    onChange={(value) => setForm((current) => ({ ...current, due_date: value }))}
-                    required
-                  />
+                  <label>
+                    <span>Due Date</span>
+                    <ViloDateInput
+                      value={form.due_date}
+                      onChange={(value) => setForm((current) => ({ ...current, due_date: value }))}
+                      required
+                    />
+                  </label>
+                  <label>
+                    <span>Due Time (optional)</span>
+                    <input type="time" value={form.due_time} onChange={(event) => setForm((current) => ({ ...current, due_time: event.target.value }))} />
+                  </label>
+                </div>
+                <div className="vilo-form-row-two">
                   <ViloDateInput
                     includeTime
                     value={form.reminder_at}

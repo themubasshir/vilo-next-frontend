@@ -40,6 +40,7 @@ from app.services.access import accessible_case_condition
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 ALLOWED_STAFF = ["partner", "admin", "lawyer", "paralegal"]
+CASE_DOCUMENT_DELETE_ROLES = {"partner", "admin"}
 VALID_VISIBILITY = {"internal", "client_visible"}
 STORAGE_ROOT = Path("backend/storage/documents")
 DOCX_MIME_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
@@ -1096,6 +1097,8 @@ async def delete_document(
     doc = await get_org_document(db, document_id, current_user)
     if not doc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+    if doc.case_id is not None and current_user.role.value not in CASE_DOCUMENT_DELETE_ROLES:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not have permission to delete this case document.")
 
     if doc.case_id:
         await create_case_timeline_event(

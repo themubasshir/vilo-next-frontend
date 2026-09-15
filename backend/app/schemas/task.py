@@ -1,5 +1,5 @@
 from datetime import datetime
-from pydantic import AliasChoices, BaseModel, Field, model_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, model_validator
 
 
 class TaskCreate(BaseModel):
@@ -23,6 +23,8 @@ class TaskCreate(BaseModel):
 
 
 class TaskUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     case_id: int | None = None
     client_id: int | None = None
     assigned_to: int | None = Field(default=None, validation_alias=AliasChoices("assigned_to", "assigned_user_id"))
@@ -35,7 +37,6 @@ class TaskUpdate(BaseModel):
     reminder_at: datetime | None = None
     notes: str | None = None
     completed_at: datetime | None = None
-    archived_at: datetime | None = None
 
 
 class TaskResponse(BaseModel):

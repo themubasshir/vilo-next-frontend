@@ -371,20 +371,46 @@ def test_lawyer_cannot_update_master_precedent():
         cleanup(client)
 
 
-def test_archive_hides_precedent_from_default_list():
+def test_archive_endpoint_is_removed_and_historical_precedent_stays_filtered():
     active = _precedent_obj(precedent_id=1)
     archived = _precedent_obj(precedent_id=2, is_archived=True)
-    db = PrecedentDBStub(scalar_values=[active, archived], scalars_values=[[active, archived]])
+    db = PrecedentDBStub(scalars_values=[[active, archived]])
     client = build_client("partner", db)
     try:
         archive = client.post("/api/v1/precedents/1/archive")
-        assert archive.status_code == 200
-        assert archive.json()["is_archived"] is True
+        assert archive.status_code in {404, 405}
+        assert active.is_archived is False
+        assert archived.is_archived is True
 
         listed = client.get("/api/v1/precedents")
         assert listed.status_code == 200
         body = listed.json()
-        assert body["total"] == 0
+        assert body["total"] == 1
+        assert body["items"][0]["id"] == active.id
+    finally:
+        cleanup(client)
+
+
+def test_patch_is_archived_is_rejected_without_mutation():
+    row = _precedent_obj(is_archived=False)
+    db = PrecedentDBStub(scalar_values=[row])
+    client = build_client("admin", db)
+    try:
+        response = client.patch("/api/v1/precedents/21", json={"is_archived": True})
+        assert response.status_code == 422
+        assert row.is_archived is False
+    finally:
+        cleanup(client)
+
+
+def test_restore_endpoint_is_not_available():
+    row = _precedent_obj(is_archived=True)
+    db = PrecedentDBStub(scalar_values=[row])
+    client = build_client("admin", db)
+    try:
+        response = client.post("/api/v1/precedents/21/restore")
+        assert response.status_code in {404, 405}
+        assert row.is_archived is True
     finally:
         cleanup(client)
 

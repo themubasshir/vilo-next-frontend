@@ -9,6 +9,7 @@ import { getCachedUser } from "../../../lib/auth";
 import { formatViloDate } from "../../../lib/dateFormat";
 import { DiscardChangesDialog, useModalCloseGuard } from "../../../components/useModalCloseGuard";
 import ViloDateInput from "../../../components/ViloDateInput";
+import { combineTaskDueDateTime } from "../../../lib/taskDueDateTime";
 
 const STATUS_OPTIONS = ["not_started", "in_progress", "waiting", "completed"];
 const PRIORITY_OPTIONS = ["low", "medium", "high", "urgent"];
@@ -20,7 +21,6 @@ const TASK_TABS = [
   ["overdue", "Overdue"],
   ["in_progress", "In Progress"],
   ["completed", "Completed"],
-  ["archived", "Archived"],
 ];
 const DROPDOWN_MENU_GAP = 8;
 const DROPDOWN_VIEWPORT_PADDING = 12;
@@ -43,6 +43,7 @@ const initialForm = {
   status: "not_started",
   priority: "medium",
   due_date: "",
+  due_time: "",
   reminder_at: "",
   reminder_choice: "",
   custom_reminder_at: "",
@@ -84,13 +85,10 @@ function utcDateKey(value) {
 }
 
 function isDueToday(task, todayKey) {
-  return !task?.archived_at && !isCompleted(task) && utcDateKey(task?.due_date) === todayKey;
+  return !isCompleted(task) && utcDateKey(task?.due_date) === todayKey;
 }
 
 function matchesTaskTab(task, tab, currentUserId, todayKey) {
-  const archived = Boolean(task.archived_at);
-  if (tab === "archived") return archived;
-  if (archived) return false;
   if (tab === "my_tasks") return Boolean(currentUserId) && Number(task.assigned_user_id || task.assigned_to || 0) === Number(currentUserId);
   if (tab === "due_today") return isDueToday(task, todayKey);
   if (tab === "overdue") return isOverdue(task);
@@ -101,7 +99,7 @@ function matchesTaskTab(task, tab, currentUserId, todayKey) {
 
 function tabFromLegacyFilter(value) {
   const normalized = String(value || "").trim().toLowerCase();
-  if (["my_tasks", "due_today", "overdue", "in_progress", "completed", "archived"].includes(normalized)) return normalized;
+  if (["my_tasks", "due_today", "overdue", "in_progress", "completed"].includes(normalized)) return normalized;
   return "all";
 }
 
@@ -114,7 +112,6 @@ function taskEmptyMessage(activeTab, hasFilters) {
     overdue: "No overdue tasks.",
     in_progress: "No tasks are in progress.",
     completed: "No completed tasks.",
-    archived: "No archived tasks.",
   };
   return messages[activeTab] || "No tasks matched this view.";
 }
@@ -154,11 +151,12 @@ function buildTaskDetailHref(taskId, searchParams, extra = {}) {
 }
 
 function computeTaskReminderAt(form) {
-  if (!form.reminder_choice || !form.due_date) return null;
+  if (!form.reminder_choice) return null;
   if (form.reminder_choice === "custom") {
     return form.custom_reminder_at ? new Date(form.custom_reminder_at) : null;
   }
-  const due = new Date(form.due_date);
+  if (!form.due_time) throw new Error("Select a Due Time to use a reminder relative to the task due time.");
+  const due = new Date(combineTaskDueDateTime(form.due_date, form.due_time));
   if (Number.isNaN(due.getTime())) return null;
   due.setMinutes(due.getMinutes() - Number(form.reminder_choice));
   return due;
@@ -216,7 +214,7 @@ function TasksPageContent() {
     setError("");
     try {
       const [taskData, caseData, clientData, teamData] = await Promise.all([
-        apiRequest("/api/v1/tasks?include_archived=true"),
+        apiRequest("/api/v1/tasks"),
         apiRequest("/api/v1/cases"),
         apiRequest("/api/v1/clients"),
         apiRequest("/api/v1/team"),
@@ -284,7 +282,7 @@ function TasksPageContent() {
       ...current,
       client_id: derivedClientId ? String(derivedClientId) : current.client_id,
       case_id: requestedCaseId ? String(requestedCaseId) : current.case_id,
-      due_date: requestedDueDate && !current.due_date ? `${requestedDueDate}T09:00` : current.due_date,
+      due_date: requestedDueDate && !current.due_date ? requestedDueDate : current.due_date,
       };
       setCreateInitialForm(next);
       return next;
@@ -467,7 +465,7 @@ function TasksPageContent() {
           task_type: form.task_type,
           status: form.status,
           priority: form.priority,
-          due_date: form.due_date ? new Date(form.due_date).toISOString() : null,
+          due_date: combineTaskDueDateTime(form.due_date, form.due_time),
           reminder_at: reminderAt ? reminderAt.toISOString() : null,
           notes: form.notes || null,
         }),
@@ -641,7 +639,7 @@ function TasksPageContent() {
                   return (
                     <tr
                       key={task.id}
-                      className={`tasks-table-row${isCompleted(task) ? " is-completed" : ""}${task.archived_at ? " is-archived" : ""}${isOverdue(task) ? " is-overdue" : ""}`}
+                      className={`tasks-table-row${isCompleted(task) ? " is-completed" : ""}${isOverdue(task) ? " is-overdue" : ""}`}
                       onClick={() => router.push(detailHref)}
                     >
                       <td>
@@ -824,12 +822,21 @@ function TaskEditorModal({
             </div>
 
             <div className="vilo-form-row-two">
-              <ViloDateInput
-                includeTime
-                value={form.due_date}
-                onChange={(value) => setForm((current) => ({ ...current, due_date: value }))}
-                required
-              />
+              <label>
+                <span>Due Date</span>
+                <ViloDateInput
+                  value={form.due_date}
+                  onChange={(value) => setForm((current) => ({ ...current, due_date: value }))}
+                  required
+                />
+              </label>
+              <label>
+                <span>Due Time (optional)</span>
+                <input type="time" value={form.due_time} onChange={(event) => setForm((current) => ({ ...current, due_time: event.target.value }))} />
+              </label>
+            </div>
+
+            <div className="vilo-form-row-two">
               <select
                 value={form.reminder_choice}
                 onChange={(event) => setForm((current) => ({ ...current, reminder_choice: event.target.value, custom_reminder_at: "" }))}
