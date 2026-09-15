@@ -4,6 +4,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiDownload, apiRequest } from "../lib/api";
 
 let onlyOfficeInstanceCounter = 0;
+const onlyOfficeScriptPromises = new Map();
+const ONLYOFFICE_SCRIPT_TIMEOUT_MS = 10000;
+const ONLYOFFICE_OPEN_TIMEOUT_MS = 30000;
 
 export default function OnlyOfficeDocumentModal({
   document,
@@ -18,6 +21,7 @@ export default function OnlyOfficeDocumentModal({
   const [downloadError, setDownloadError] = useState("");
   const [downloading, setDownloading] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
+  const [retryNonce, setRetryNonce] = useState(0);
   const editorRef = useRef(null);
   const initKeyRef = useRef(null);
   const instanceIdRef = useRef(null);
@@ -46,6 +50,7 @@ export default function OnlyOfficeDocumentModal({
   useEffect(() => {
     if (!document?.id) return undefined;
     let cancelled = false;
+    const controller = new AbortController();
 
     async function createSession() {
       setSession(null);
@@ -57,24 +62,28 @@ export default function OnlyOfficeDocumentModal({
         const suffix = isViewMode ? "?mode=view" : "?mode=edit";
         const response = await apiRequest(`/api/v1/documents/${document.id}/onlyoffice/session${suffix}`, {
           method: "POST",
+          signal: controller.signal,
         });
         if (!response?.document_server_url || !response?.editor_config) {
           throw new Error("Backend returned an incomplete ONLYOFFICE session.");
         }
         if (!cancelled) setSession(response);
       } catch (err) {
-        if (cancelled) return;
+        if (cancelled || err?.name === "AbortError") return;
         setLoading(false);
         setStatus("error");
         setError(isViewMode
-          ? "This Word document could not be opened in the online viewer."
-          : "This Word document could not be opened in the online editor.");
+          ? "Online viewer could not be prepared."
+          : "Online editor could not be prepared.");
       }
     }
 
     void createSession();
-    return () => { cancelled = true; };
-  }, [document?.id, isViewMode]);
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [document?.id, isViewMode, retryNonce]);
 
   useEffect(() => {
     if (!session?.document_server_url || !containerId) return undefined;
@@ -88,20 +97,21 @@ export default function OnlyOfficeDocumentModal({
       setLoading(false);
       setStatus("error");
       setError(isViewMode
-        ? "This Word document could not be opened in the online viewer."
-        : "This Word document could not be opened in the online editor.");
+        ? "Online viewer could not open this document."
+        : "Online editor could not open this document.");
     }
 
     async function mountEditor() {
       setLoading(true);
       setError("");
       setStatus("script");
-      openingTimer = window.setTimeout(failToOpen, 30000);
+      openingTimer = window.setTimeout(failToOpen, ONLYOFFICE_OPEN_TIMEOUT_MS);
       try {
         await loadOnlyOfficeScript(session.document_server_url);
-        await waitForDocsAPI();
         if (cancelled) return;
         if (!window.DocsAPI?.DocEditor) throw new Error("ONLYOFFICE DocsAPI is unavailable.");
+
+        if (editorRef.current && initKeyRef.current === sessionKey) return;
 
         destroyOnlyOfficeEditor(editorRef, initKeyRef, containerId);
         const host = window.document.getElementById(containerId);
@@ -136,6 +146,16 @@ export default function OnlyOfficeDocumentModal({
       destroyOnlyOfficeEditor(editorRef, initKeyRef, containerId);
     };
   }, [containerId, isViewMode, session, sessionKey]);
+
+  const retry = useCallback(() => {
+    destroyOnlyOfficeEditor(editorRef, initKeyRef, containerId);
+    setSession(null);
+    setError("");
+    setDownloadError("");
+    setLoading(true);
+    setStatus("preparing");
+    setRetryNonce((current) => current + 1);
+  }, [containerId]);
 
   useEffect(() => {
     const previousOverflow = window.document.body.style.overflow;
@@ -213,16 +233,23 @@ export default function OnlyOfficeDocumentModal({
           <div className={`documents-onlyoffice-editor-shell${fullscreen ? " documents-onlyoffice-editor-shell--fullscreen" : ""}`}>
             <div id={containerId} className="documents-onlyoffice-editor" />
             {error ? (
-              <div className="documents-onlyoffice-editor-status">
+              <div className="documents-onlyoffice-editor-status" role="alert">
                 <div className="protected-file-preview-message">
                   <p className="vilo-state vilo-state--error">{error}</p>
-                  {downloadPath ? <button type="button" className="vilo-btn vilo-btn--primary" onClick={download} disabled={downloading}>{downloading ? "Downloading..." : "Download"}</button> : null}
+                  <div className="vilo-table-actions">
+                    <button type="button" className="vilo-btn vilo-btn--primary" onClick={retry}>Retry</button>
+                    {downloadPath ? <button type="button" className="vilo-btn vilo-btn--secondary" onClick={download} disabled={downloading}>{downloading ? "Downloading..." : "Download"}</button> : null}
+                    <button type="button" className="vilo-btn vilo-btn--ghost" onClick={handleClose}>Close</button>
+                  </div>
                 </div>
               </div>
             ) : null}
             {!error && (loading || status !== "ready") ? (
-              <div className="documents-onlyoffice-editor-status">
-                <p className="vilo-state">{isViewMode ? "Opening document preview..." : "Opening Word Editor..."}</p>
+              <div className="documents-onlyoffice-editor-status" role="status" aria-live="polite">
+                <div className="protected-file-preview-message">
+                  <span className="protected-file-preview-spinner" aria-hidden="true" />
+                  <p className="vilo-state">{loadingMessage(status, isViewMode)}</p>
+                </div>
               </div>
             ) : null}
           </div>
@@ -235,24 +262,61 @@ export default function OnlyOfficeDocumentModal({
 
 async function loadOnlyOfficeScript(documentServerUrl) {
   const src = `${String(documentServerUrl || "").replace(/\/$/, "")}/web-apps/apps/api/documents/api.js`;
-  const existing = window.document.querySelector(`script[data-onlyoffice-src="${src}"]`);
-  if (existing) {
-    if (window.DocsAPI?.DocEditor) return;
-    await waitForDocsAPI();
-    return;
-  }
-  await new Promise((resolve, reject) => {
-    const script = window.document.createElement("script");
-    script.src = src;
-    script.async = true;
-    script.dataset.onlyofficeSrc = src;
-    script.onload = resolve;
-    script.onerror = () => {
-      script.remove();
-      reject(new Error("Failed to load ONLYOFFICE editor assets."));
+  if (window.DocsAPI?.DocEditor) return;
+  if (onlyOfficeScriptPromises.has(src)) return onlyOfficeScriptPromises.get(src);
+
+  const promise = new Promise((resolve, reject) => {
+    let settled = false;
+    let script = Array.from(window.document.scripts).find((item) => item.dataset.onlyofficeSrc === src);
+    const finish = (error) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timeout);
+      script?.removeEventListener("load", handleLoad);
+      script?.removeEventListener("error", handleError);
+      if (error) reject(error);
+      else resolve();
     };
-    window.document.body.appendChild(script);
+    const handleLoad = async () => {
+      try {
+        await waitForDocsAPI();
+        finish();
+      } catch (error) {
+        finish(error);
+      }
+    };
+    const handleError = () => {
+      script?.remove();
+      finish(new Error("Failed to load ONLYOFFICE editor assets."));
+    };
+    const timeout = window.setTimeout(() => {
+      script?.remove();
+      finish(new Error("ONLYOFFICE editor assets timed out."));
+    }, ONLYOFFICE_SCRIPT_TIMEOUT_MS);
+
+    if (!script) {
+      script = window.document.createElement("script");
+      script.src = src;
+      script.async = true;
+      script.dataset.onlyofficeSrc = src;
+      script.addEventListener("load", handleLoad, { once: true });
+      script.addEventListener("error", handleError, { once: true });
+      window.document.body.appendChild(script);
+    } else {
+      script.addEventListener("error", handleError, { once: true });
+      // The tag may have completed before this component subscribed. One
+      // shared readiness poll is still bounded by the outer asset timeout.
+      void handleLoad();
+    }
+    if (window.DocsAPI?.DocEditor) finish();
   });
+  onlyOfficeScriptPromises.set(src, promise);
+  try {
+    await promise;
+  } catch (error) {
+    onlyOfficeScriptPromises.delete(src);
+    throw error;
+  }
 }
 
 async function waitForDocsAPI(timeoutMs = 4000) {
@@ -271,4 +335,10 @@ function destroyOnlyOfficeEditor(editorRef, initKeyRef, containerId) {
   if (!containerId || typeof window === "undefined") return;
   const host = window.document.getElementById(containerId);
   if (host) host.replaceChildren();
+}
+
+function loadingMessage(status, isViewMode) {
+  if (status === "preparing") return isViewMode ? "Preparing viewer..." : "Preparing editor...";
+  if (status === "script") return isViewMode ? "Loading viewer..." : "Loading editor...";
+  return "Opening document...";
 }

@@ -93,6 +93,15 @@ def _doc_obj(doc_id=51, org_id=1, path="/tmp/original.pdf"):
     )
 
 
+def _txt_doc(path: str, *, content_size: int = 5):
+    doc = _doc_obj(path=path)
+    doc.title = "Notes"
+    doc.file_name = "notes.txt"
+    doc.file_type = "text/plain"
+    doc.file_size = content_size
+    return doc
+
+
 def _version_obj(version_id=8, doc_id=51, org_id=1):
     now = datetime.now(timezone.utc)
     return SimpleNamespace(
@@ -241,8 +250,74 @@ def test_pdf_editable_content_returns_unsupported():
         assert res.status_code == 200
         body = res.json()
         assert body["editable"] is False
-        assert "PDF editing will be added later" in body["reason"]
+        assert body["reason"] == "This file type cannot be edited directly in VILO."
         assert "file_path" not in body
+    finally:
+        cleanup(client)
+
+
+def test_txt_editable_content_returns_exact_utf8_without_storage_path(tmp_path, monkeypatch):
+    monkeypatch.setattr(documents_module, "STORAGE_ROOT", tmp_path)
+    path = tmp_path / "1" / "notes.txt"
+    path.parent.mkdir(parents=True)
+    content = "First line\nবাংলা line\n"
+    path.write_bytes(content.encode("utf-8"))
+    db = DocsVersionDBStub(scalar_values=[_txt_doc(str(path), content_size=len(content.encode("utf-8")))])
+    client = build_client("lawyer", db)
+    try:
+        response = client.get("/api/v1/documents/51/editable-content")
+        assert response.status_code == 200
+        body = response.json()
+        assert body["document_id"] == 51
+        assert body["editable"] is True
+        assert body["mode"] == "text"
+        assert body["content"] == content
+        assert body["file_type"] == "text/plain"
+        assert "file_path" not in body
+    finally:
+        cleanup(client)
+
+
+@pytest.mark.parametrize("filename,mime", [("scan.jpg", "image/jpeg"), ("contract.pdf", "application/pdf")])
+def test_binary_files_are_not_directly_editable(filename, mime):
+    doc = _doc_obj()
+    doc.file_name = filename
+    doc.file_type = mime
+    db = DocsVersionDBStub(scalar_values=[doc])
+    client = build_client("admin", db)
+    try:
+        response = client.get("/api/v1/documents/51/editable-content")
+        assert response.status_code == 200
+        assert response.json()["editable"] is False
+    finally:
+        cleanup(client)
+
+
+def test_text_plain_mime_without_txt_filename_is_not_editable():
+    doc = _doc_obj()
+    doc.file_name = "unknown.bin"
+    doc.file_type = "text/plain"
+    db = DocsVersionDBStub(scalar_values=[doc])
+    client = build_client("admin", db)
+    try:
+        response = client.get("/api/v1/documents/51/editable-content")
+        assert response.status_code == 200
+        assert response.json()["editable"] is False
+    finally:
+        cleanup(client)
+
+
+def test_txt_invalid_utf8_returns_controlled_error(tmp_path, monkeypatch):
+    monkeypatch.setattr(documents_module, "STORAGE_ROOT", tmp_path)
+    path = tmp_path / "1" / "notes.txt"
+    path.parent.mkdir(parents=True)
+    path.write_bytes(b"\xff\xfeinvalid")
+    db = DocsVersionDBStub(scalar_values=[_txt_doc(str(path))])
+    client = build_client("admin", db)
+    try:
+        response = client.get("/api/v1/documents/51/editable-content")
+        assert response.status_code == 422
+        assert response.json()["detail"] == "This text file cannot be edited because its encoding is not supported."
     finally:
         cleanup(client)
 
@@ -535,6 +610,71 @@ async def test_save_docx_edit_creates_new_version_and_keeps_original(tmp_path):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("edited_text", ["First line\nSecond line edited\n", ""])
+async def test_save_txt_edit_preserves_document_and_archives_downloadable_version(tmp_path, monkeypatch, edited_text):
+    monkeypatch.setattr(documents_module, "STORAGE_ROOT", tmp_path)
+    old_bytes = b"First line\nSecond line\n"
+    old_path = tmp_path / "1" / "notes.txt"
+    old_path.parent.mkdir(parents=True)
+    old_path.write_bytes(old_bytes)
+    doc = _txt_doc(str(old_path), content_size=len(old_bytes))
+    doc.case_id = 7
+    db = DocsVersionDBStub()
+    user = DummyUser(id=10, organization_id=1, name="Admin", email="a@example.com", role=UserRole.admin)
+    audit_calls = []
+    timeline_calls = []
+
+    async def scalar_side_effect(query, *args, **kwargs):
+        return doc
+
+    async def fake_audit(*args, **kwargs):
+        audit_calls.append(kwargs)
+
+    async def fake_timeline(*args, **kwargs):
+        timeline_calls.append(kwargs)
+
+    db.scalar = scalar_side_effect  # type: ignore[assignment]
+    monkeypatch.setattr(documents_module, "log_audit_event", fake_audit)
+    monkeypatch.setattr(documents_module, "create_case_timeline_event", fake_timeline)
+
+    response = await documents_module.save_document_editable_content(
+        document_id=51,
+        payload=documents_module.DocumentEditableContentUpdate(content=edited_text, version_note="Updated notes"),
+        request=SimpleNamespace(client=None, headers={}),
+        db=db,
+        current_user=user,
+    )
+
+    versions = [row for row in db.added if row.__class__.__name__ == "DocumentVersion"]
+    assert response.id == 51
+    assert response.version == 2
+    assert response.file_name == "notes.txt"
+    assert response.file_type == "text/plain"
+    assert response.file_size == len(edited_text.encode("utf-8"))
+    assert response.version_source == "content_edit"
+    assert response.version_note == "Updated notes"
+    assert Path(doc.file_path).read_bytes() == edited_text.encode("utf-8")
+    assert len(versions) == 1
+    assert versions[0].version_number == 1
+    assert versions[0].file_name == "notes.txt"
+    assert Path(versions[0].file_path).read_bytes() == old_bytes
+    assert audit_calls[0]["action"] == "document_content_edited"
+    assert timeline_calls[0]["case_id"] == 7
+    assert db.commit_count == 1
+
+    versions[0].id = 8
+
+    async def download_scalar(query, *args, **kwargs):
+        return versions[0] if "document_versions.id" in str(query) else doc
+
+    db.scalar = download_scalar  # type: ignore[assignment]
+    current = await documents_module.download_document(document_id=51, db=db, current_user=user)
+    archived = await documents_module.download_document_version(document_id=51, version_id=8, db=db, current_user=user)
+    assert Path(current.path).read_bytes() == edited_text.encode("utf-8")
+    assert Path(archived.path).read_bytes() == old_bytes
+
+
+@pytest.mark.asyncio
 async def test_onlyoffice_callback_save_creates_new_version_and_preserves_original(tmp_path, monkeypatch):
     monkeypatch.setattr(documents_module.settings, "onlyoffice_jwt_secret", None)
     monkeypatch.setattr(documents_module, "STORAGE_ROOT", tmp_path)
@@ -659,6 +799,33 @@ def test_cross_org_docx_edit_access_blocked():
     try:
         res = client.post("/api/v1/documents/999/editable-content", json={"content": "x", "version_note": "note"})
         assert res.status_code == 404
+    finally:
+        cleanup(client)
+
+
+def test_cross_org_txt_edit_access_blocked():
+    db = DocsVersionDBStub(scalar_values=[None])
+    client = build_client("paralegal", db)
+    try:
+        response = client.post("/api/v1/documents/999/editable-content", json={"content": "x"})
+        assert response.status_code == 404
+        assert db.commit_count == 0
+    finally:
+        cleanup(client)
+
+
+@pytest.mark.parametrize("filename,mime", [("contract.pdf", "application/pdf"), ("scan.png", "image/png")])
+def test_unsupported_binary_content_save_is_rejected(filename, mime):
+    doc = _doc_obj()
+    doc.file_name = filename
+    doc.file_type = mime
+    db = DocsVersionDBStub(scalar_values=[doc])
+    client = build_client("admin", db)
+    try:
+        response = client.post("/api/v1/documents/51/editable-content", json={"content": "x"})
+        assert response.status_code == 400
+        assert db.commit_count == 0
+        assert [row for row in db.added if row.__class__.__name__ == "DocumentVersion"] == []
     finally:
         cleanup(client)
 

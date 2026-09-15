@@ -43,7 +43,9 @@ ALLOWED_STAFF = ["partner", "admin", "lawyer", "paralegal"]
 VALID_VISIBILITY = {"internal", "client_visible"}
 STORAGE_ROOT = Path("backend/storage/documents")
 DOCX_MIME_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+TXT_MIME_TYPE = "text/plain"
 DOCX_WARNING = "Editing DOCX content creates a new version. Original uploaded file remains in version history."
+TXT_WARNING = "Saving creates a new document version. Previous versions are preserved."
 CLIENT_ID_CATEGORY = "client_id"
 ONLYOFFICE_CALLBACK_SUCCESS = {"error": 0}
 ONLYOFFICE_SAVE_STATUSES = {2, 6}
@@ -135,6 +137,29 @@ def is_docx_document(document: Document) -> bool:
     file_name = (document.file_name or "").lower()
     file_type = (document.file_type or "").lower()
     return file_name.endswith(".docx") or file_type == DOCX_MIME_TYPE
+
+
+def is_txt_document(document: Document) -> bool:
+    """Treat a file as text only when its stored name explicitly identifies TXT.
+
+    Browsers frequently send ``text/plain`` for unknown files, so MIME alone is
+    deliberately insufficient to opt arbitrary stored bytes into text editing.
+    """
+    return (document.file_name or "").strip().lower().endswith(".txt")
+
+
+def read_txt_content(file_path: str) -> str:
+    path = resolve_stored_file(file_path, STORAGE_ROOT)
+    data = path.read_bytes()
+    if len(data) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Text file exceeds the editable size limit")
+    try:
+        return data.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="This text file cannot be edited because its encoding is not supported.",
+        ) from exc
 
 
 def extract_docx_text(file_path: str) -> str:
@@ -567,7 +592,7 @@ async def create_onlyoffice_session(
     if not document_server_url:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Online editor is not configured. Use basic editor or Replace File.",
+            detail="Online editor is not configured. Download or replace the document instead.",
         )
 
     doc = await get_org_document(db, document_id, current_user)
@@ -642,7 +667,6 @@ async def create_onlyoffice_session(
             if is_view_mode
             else [
                 "Edits saved from ONLYOFFICE create a new document version.",
-                "The existing basic editor remains available as a fallback for DOCX text edits.",
             ]
         ),
     )
@@ -830,6 +854,17 @@ async def get_document_editable_content(
     if not doc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
 
+    if is_txt_document(doc):
+        return DocumentEditableContentResponse(
+            document_id=doc.id,
+            file_type=TXT_MIME_TYPE,
+            editable=True,
+            mode="text",
+            content=read_txt_content(doc.file_path),
+            warning=TXT_WARNING,
+            reason=None,
+        )
+
     if not is_docx_document(doc):
         return DocumentEditableContentResponse(
             document_id=doc.id,
@@ -837,8 +872,8 @@ async def get_document_editable_content(
             editable=False,
             mode=None,
             content="",
-            warning=DOCX_WARNING,
-            reason="DOCX editing only is supported right now. PDF editing will be added later.",
+            warning=None,
+            reason="This file type cannot be edited directly in VILO.",
         )
 
     return DocumentEditableContentResponse(
@@ -863,22 +898,29 @@ async def save_document_editable_content(
     doc = await get_org_document(db, document_id, current_user)
     if not doc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
-    if not is_docx_document(doc):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only DOCX documents can be edited in this workflow")
+    is_txt = is_txt_document(doc)
+    if not is_txt and not is_docx_document(doc):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="This file type cannot be edited directly in VILO")
 
     previous_version = doc.version
     version_note = payload.version_note.strip() if payload.version_note and payload.version_note.strip() else None
 
-    data = render_docx_bytes(payload.content)
-    file_name = build_docx_version_name(doc)
-    file_path, _stored_name = persist_file(STORAGE_ROOT, current_user.organization_id, file_name, data)
+    data = payload.content.encode("utf-8") if is_txt else render_docx_bytes(payload.content)
+    file_name = doc.file_name if is_txt else build_docx_version_name(doc)
+    file_path, _stored_name = persist_file(
+        STORAGE_ROOT,
+        current_user.organization_id,
+        file_name,
+        data,
+        allow_empty=is_txt,
+    )
     now = current_utc()
 
     db.add(archive_current_document_version(doc, current_user.id, now))
 
     doc.file_name = file_name
     doc.file_path = file_path
-    doc.file_type = DOCX_MIME_TYPE
+    doc.file_type = TXT_MIME_TYPE if is_txt else DOCX_MIME_TYPE
     doc.file_size = len(data)
     doc.version = previous_version + 1
     doc.uploaded_by = current_user.id

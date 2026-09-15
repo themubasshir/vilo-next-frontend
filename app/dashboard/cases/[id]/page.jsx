@@ -8,7 +8,7 @@ import { useParams } from "next/navigation";
 import { apiDownload, apiRequest, apiUpload } from "../../../../lib/api";
 import OnlyOfficeDocumentModal from "../../../../components/OnlyOfficeDocumentModal";
 import ProtectedFilePreviewModal, { useProtectedFilePreview } from "../../../../components/ProtectedFilePreviewModal";
-import { getDocumentViewerType } from "../../../../lib/documentViewer";
+import { getDocumentEditMode, getDocumentViewerType } from "../../../../lib/documentViewer";
 import { formatViloDate, formatViloDateTime } from "../../../../lib/dateFormat";
 import ViloDateInput from "../../../../components/ViloDateInput";
 
@@ -73,6 +73,11 @@ export default function CaseDetailPage() {
   const [tasks, setTasks] = useState([]);
   const [documents, setDocuments] = useState([]);
   const [wordTarget, setWordTarget] = useState(null);
+  const [textTarget, setTextTarget] = useState(null);
+  const [textContent, setTextContent] = useState("");
+  const [textVersionNote, setTextVersionNote] = useState("");
+  const [textLoading, setTextLoading] = useState(false);
+  const [documentMessage, setDocumentMessage] = useState("");
   const { preview, openPreview, closePreview } = useProtectedFilePreview();
   const [notes, setNotes] = useState([]);
   const [timeline, setTimeline] = useState([]);
@@ -402,6 +407,50 @@ export default function CaseDetailPage() {
     if (edited) await load();
   }
 
+  async function openTextEditor(doc) {
+    setMenuOpenId(null);
+    setError("");
+    setDocumentMessage("");
+    setTextTarget(doc);
+    setTextContent("");
+    setTextVersionNote("");
+    setTextLoading(true);
+    try {
+      const response = await apiRequest(`/api/v1/documents/${doc.id}/editable-content`);
+      if (!response.editable || response.mode !== "text") {
+        throw new Error(response.reason || "This document cannot be edited directly in VILO.");
+      }
+      setTextContent(response.content);
+    } catch (err) {
+      setTextTarget(null);
+      setError(err.message || "Failed to load editable content");
+    } finally {
+      setTextLoading(false);
+    }
+  }
+
+  async function saveTextDocument(event) {
+    event.preventDefault();
+    if (!textTarget) return;
+    setSubmitting(true);
+    setError("");
+    try {
+      await apiRequest(`/api/v1/documents/${textTarget.id}/editable-content`, {
+        method: "POST",
+        body: JSON.stringify({ content: textContent, version_note: textVersionNote.trim() || null }),
+      });
+      setTextTarget(null);
+      setTextContent("");
+      setTextVersionNote("");
+      setDocumentMessage("Document saved as a new version.");
+      await load();
+    } catch (err) {
+      setError(err.message || "Failed to save edited content");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   const timelineRows = useMemo(() => timeline.map((entry, index) => ({
     id: entry.id,
     n: index + 1,
@@ -617,28 +666,32 @@ export default function CaseDetailPage() {
                   <h2>Documents</h2>
                   <button type="button" className="vilo-btn vilo-btn--secondary" onClick={() => setModalType("add-document")}>Upload Document</button>
                 </div>
+                {documentMessage ? <p className="vilo-state vilo-state--success" role="status">{documentMessage}</p> : null}
                 {documents.length ? (
                   <div className="vilo-table-wrap case-table-wrap">
                     <table className="team-table">
                       <thead><tr><th>Title</th><th>File</th><th>Category</th><th>Visibility</th><th>Action</th></tr></thead>
                       <tbody>
-                        {documents.map((doc) => (
+                        {documents.map((doc) => {
+                          const editMode = getDocumentEditMode({ filename: doc.file_name, mediaType: doc.file_type });
+                          return (
                           <tr key={doc.id}>
                             <td>{doc.title}</td><td>{doc.file_name}</td><td>{doc.category || "-"}</td>
                             <td><span className={`vilo-badge ${doc.visibility === "client_visible" ? "vilo-badge--active" : "vilo-badge--draft"}`}>{doc.visibility}</span></td>
                             <td>
                               <div className="vilo-table-actions">
                                 <button type="button" className="vilo-btn vilo-btn--ghost vilo-btn--xs" onClick={() => viewDocument(doc)}>View</button>
-                                {getDocumentViewerType({ filename: doc.file_name, mediaType: doc.file_type }) === "onlyoffice" ? (
-                                  <button type="button" className="vilo-btn vilo-btn--ghost vilo-btn--xs" onClick={() => setWordTarget({ document: doc, mode: "edit" })}>Edit in Word</button>
+                                {editMode ? (
+                                  <button type="button" className="vilo-btn vilo-btn--ghost vilo-btn--xs" onClick={() => editMode === "onlyoffice" ? setWordTarget({ document: doc, mode: "edit" }) : openTextEditor(doc)}>Edit</button>
                                 ) : null}
                                 <button type="button" className="vilo-btn vilo-btn--secondary vilo-btn--xs" onClick={() => downloadDocument(doc.id)}>Download</button>
-                                <button type="button" className="vilo-btn vilo-btn--ghost vilo-btn--xs" onClick={() => { setSelectedDocument(doc); setModalType("replace-document"); }}>Replace File</button>
+                                <button type="button" className="vilo-btn vilo-btn--ghost vilo-btn--xs" onClick={() => { setSelectedDocument(doc); setModalType("replace-document"); }}>Replace</button>
                                 <button type="button" className="vilo-btn vilo-btn--ghost vilo-btn--xs" onClick={() => openVersionHistory(doc)}>Versions</button>
                               </div>
                             </td>
                           </tr>
-                        ))}
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
@@ -917,6 +970,26 @@ export default function CaseDetailPage() {
       ) : null}
       <ProtectedFilePreviewModal preview={preview} onClose={closePreview} />
       {wordTarget ? <OnlyOfficeDocumentModal document={wordTarget.document} mode={wordTarget.mode} downloadPath={`/api/v1/documents/${wordTarget.document.id}/download`} onClose={closeWordDocument} /> : null}
+      {textTarget ? (
+        <Modal title="Edit Text Document" onClose={() => { if (!submitting) setTextTarget(null); }}>
+          <form className="vilo-form-grid documents-edit-form" onSubmit={saveTextDocument}>
+            <p className="documents-edit-form__warning">Saving creates a new document version. Previous versions are preserved.</p>
+            <p className="documents-edit-form__note">{textTarget.file_name}</p>
+            <label className="documents-edit-form__field">
+              <span>Content</span>
+              <textarea className="documents-edit-form__textarea" value={textContent} onChange={(event) => setTextContent(event.target.value)} placeholder={textLoading ? "Loading text content..." : "Text content"} disabled={submitting || textLoading} />
+            </label>
+            <label className="documents-edit-form__field">
+              <span>Version Note</span>
+              <input value={textVersionNote} onChange={(event) => setTextVersionNote(event.target.value)} placeholder="Summarize what changed (optional)" disabled={submitting || textLoading} />
+            </label>
+            <div className="vilo-table-actions">
+              <button type="button" className="vilo-btn vilo-btn--secondary" onClick={() => setTextTarget(null)} disabled={submitting}>Cancel</button>
+              <button type="submit" className="vilo-btn vilo-btn--primary" disabled={submitting || textLoading}>{textLoading ? "Loading..." : submitting ? "Saving..." : "Save"}</button>
+            </div>
+          </form>
+        </Modal>
+      ) : null}
     </section>
   );
 }

@@ -31,8 +31,15 @@ def validate_extension(file_name: str, allowed_extensions: set[str] | None = Non
     return ext
 
 
-def persist_file(storage_root: Path, organization_id: int, original_name: str, data: bytes) -> tuple[str, str]:
-    if not data:
+def persist_file(
+    storage_root: Path,
+    organization_id: int,
+    original_name: str,
+    data: bytes,
+    *,
+    allow_empty: bool = False,
+) -> tuple[str, str]:
+    if not data and not allow_empty:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Empty file")
     if len(data) > MAX_UPLOAD_BYTES:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File exceeds upload size limit")

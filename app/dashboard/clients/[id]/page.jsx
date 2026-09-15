@@ -531,7 +531,7 @@ export default function ClientDetailPage() {
                                   <div className="vilo-table-actions client-id-actions">
                                     <button className="vilo-btn vilo-btn--secondary vilo-btn--xs" type="button" onClick={() => openDocumentPreview(row)}>View</button>
                                     <button className="vilo-btn vilo-btn--ghost vilo-btn--xs" type="button" onClick={() => apiDownload(`/api/v1/clients/${id}/id-documents/${row.id}/download`).catch((err) => setError(err.message || "Download failed"))}>Download</button>
-                                    <button className="vilo-btn vilo-btn--ghost vilo-btn--xs" type="button" onClick={() => setReplaceTarget(row)}>Edit / Replace</button>
+                                    <button className="vilo-btn vilo-btn--ghost vilo-btn--xs" type="button" onClick={() => setReplaceTarget(row)}>Replace</button>
                                     <button className="vilo-btn vilo-btn--ghost vilo-btn--xs" type="button" onClick={() => openVersionHistory(row)}>Versions</button>
                                     <button className="vilo-btn vilo-btn--danger vilo-btn--xs" type="button" onClick={() => setDeleteDocumentId(row.id)}>Delete</button>
                                   </div>
@@ -878,7 +878,7 @@ export default function ClientDetailPage() {
             <div className="vilo-modal__body">
               <form className="vilo-form-grid" onSubmit={replaceIdDocument}>
                 <p>Current file: <strong>{replaceTarget.file_name}</strong></p>
-                <input type="file" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" onChange={(e) => setReplaceFile(e.target.files?.[0] || null)} required />
+                <input type="file" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.txt" onChange={(e) => setReplaceFile(e.target.files?.[0] || null)} required />
                 <textarea placeholder="Version notes (optional)" value={replaceNotes} onChange={(e) => setReplaceNotes(e.target.value)} />
                 <div className="vilo-table-actions">
                   <button type="button" className="vilo-btn vilo-btn--secondary" onClick={() => { setReplaceTarget(null); setReplaceFile(null); setReplaceNotes(""); }}>Cancel</button>

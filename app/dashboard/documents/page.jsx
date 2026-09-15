@@ -7,7 +7,7 @@ import { getCachedUser } from "../../../lib/auth";
 import { DiscardChangesDialog, useModalCloseGuard } from "../../../components/useModalCloseGuard";
 import ProtectedFilePreviewModal, { useProtectedFilePreview } from "../../../components/ProtectedFilePreviewModal";
 import OnlyOfficeDocumentModal from "../../../components/OnlyOfficeDocumentModal";
-import { getDocumentViewerType } from "../../../lib/documentViewer";
+import { getDocumentEditMode, getDocumentViewerType } from "../../../lib/documentViewer";
 import { formatViloDate, formatViloDateTime } from "../../../lib/dateFormat";
 import ViloDateInput from "../../../components/ViloDateInput";
 
@@ -390,7 +390,7 @@ function DocumentsPageContent() {
       const response = await apiRequest(`/api/v1/documents/${document.id}/editable-content`);
       if (!response.editable) {
         setEditTarget(null);
-        setError(response.reason || "This document cannot be edited in the DOCX workflow.");
+        setError(response.reason || "This document cannot be edited directly in VILO.");
         return;
       }
       setEditContent(response.content || "");
@@ -448,7 +448,7 @@ function DocumentsPageContent() {
         }),
       });
       closeEditModal();
-      setSuccess("DOCX content saved as a new version.");
+      setSuccess("Document saved as a new version.");
       await load();
     } catch (err) {
       setError(err.message || "Failed to save edited content");
@@ -669,6 +669,7 @@ function DocumentsPageContent() {
                       {pageRows.map((document) => {
                         const caseRow = document.case_id ? casesById.get(Number(document.case_id)) : null;
                         const viewerType = getDocumentViewerType({ filename: document.file_name, mediaType: document.file_type });
+                        const editMode = getDocumentEditMode({ filename: document.file_name, mediaType: document.file_type });
 
                         return (
                           <tr key={document.id}>
@@ -700,18 +701,10 @@ function DocumentsPageContent() {
                                   <div className="case-actions-menu documents-actions-menu">
                                     <button type="button" onClick={() => viewDocument(document)}>View</button>
                                     <button type="button" onClick={() => apiDownload(`/api/v1/documents/${document.id}/download`).catch((err) => setError(err.message || "Download failed"))}>Download</button>
-                                    {viewerType === "onlyoffice" ? (
-                                      <button type="button" onClick={() => openOnlyOfficeModal(document, "edit")}>Edit in Word</button>
+                                    {editMode ? (
+                                      <button type="button" onClick={() => editMode === "onlyoffice" ? openOnlyOfficeModal(document, "edit") : openEditModal(document)}>Edit</button>
                                     ) : null}
-                                    {viewerType === "onlyoffice" ? (
-                                      <button type="button" onClick={() => openEditModal(document)}>Edit Content</button>
-                                    ) : null}
-                                    {viewerType === "pdf" ? (
-                                      <button type="button" className="is-disabled" disabled title="PDF editing will be added later. Use Replace File for now.">
-                                        PDF Editing Later
-                                      </button>
-                                    ) : null}
-                                    <button type="button" onClick={() => openReplaceModal(document)}>Edit / Replace</button>
+                                    <button type="button" onClick={() => openReplaceModal(document)}>Replace</button>
                                     <button type="button" onClick={() => openVersions(document)}>Versions</button>
                                     <button type="button" className="is-danger" onClick={() => deleteDocument(document.id)}>Delete</button>
                                   </div>
@@ -897,24 +890,22 @@ function DocumentsPageContent() {
         <div className="vilo-modal-overlay" onClick={editCloseGuard.requestClose}>
           <div className="vilo-modal documents-edit-modal" onClick={(event) => event.stopPropagation()}>
             <div className="vilo-modal__header">
-              <h3>Edit DOCX Content</h3>
+              <h3>Edit Text Document</h3>
               <button type="button" className="vilo-btn vilo-btn--ghost vilo-btn--xs" onClick={editCloseGuard.requestClose} disabled={editLoading || saving}>Close</button>
             </div>
             <div className="vilo-modal__body">
               <form className="vilo-form-grid documents-edit-form" onSubmit={saveEditedContent}>
                 <p className="documents-edit-form__warning">
-                  {editWarning || "Saving creates a new DOCX version. The original file remains in version history."}
+                  {editWarning || "Saving creates a new document version. Previous versions are preserved."}
                 </p>
-                <p className="documents-edit-form__note">
-                  Complex formatting may not be preserved perfectly in this MVP. Use Replace File when layout fidelity matters.
-                </p>
+                <p className="documents-edit-form__note">{editTarget.file_name}</p>
                 <label className="documents-edit-form__field">
                   <span>Content</span>
                   <textarea
                     className="documents-edit-form__textarea"
                     value={editContent}
                     onChange={(event) => setEditContent(event.target.value)}
-                    placeholder="Editable DOCX text will appear here."
+                    placeholder="Text content will appear here."
                     disabled={editLoading || saving}
                   />
                 </label>
