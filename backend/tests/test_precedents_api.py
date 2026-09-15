@@ -252,6 +252,19 @@ def test_lawyer_cannot_create_practice_area():
         cleanup(client)
 
 
+@pytest.mark.parametrize("name", ["Test", "test", " TEST ", "  TeSt  "])
+def test_test_practice_area_is_rejected_after_normalization(name):
+    db = PrecedentDBStub()
+    client = build_client("partner", db)
+    try:
+        response = client.post("/api/v1/precedents/practice-areas", json={"name": name})
+        assert response.status_code == 422
+        assert response.json()["detail"] == "Test is not an available practice area"
+        assert db.added == []
+    finally:
+        cleanup(client)
+
+
 def test_new_practice_area_name_can_be_assigned_to_precedent_and_legacy_category_serializes():
     custom = _precedent_obj()
     custom.practice_area = "Technology Law"

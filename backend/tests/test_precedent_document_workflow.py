@@ -134,10 +134,20 @@ async def test_copy_download_edit_callback_and_versions(workflow, monkeypatch, k
     assert_word(master.content, text)
     if original:
         assert master.content == original
+    async with sessions() as db:
+        master_row = await db.get(Precedent, precedent_id)
+        master_snapshot = (
+            master_row.name,
+            master_row.content_text,
+            master_row.file_path,
+            master_row.updated_at,
+            master.content,
+        )
     copied = await client.post(f"/api/v1/precedents/{precedent_id}/copy-to-case", json={"case_id": 1, "name": "../../Affidavit.docx", "content_text": "Legacy override must not replace source"})
     assert copied.status_code == 200, copied.text
     doc = copied.json()["document"]
     document_id = doc["id"]
+    assert doc["title"] == "../../Affidavit.docx"
     assert doc["case_id"] == doc["client_id"] == doc["organization_id"] == 1
     assert doc["uploaded_by"] == 1 and doc["version"] == 1
     assert doc["category"] == "precedent" and doc["visibility"] == "internal"
@@ -196,6 +206,14 @@ async def test_copy_download_edit_callback_and_versions(workflow, monkeypatch, k
     old = await client.get(f"/api/v1/documents/{document_id}/versions/{history[0]['id']}/download")
     assert old.content == downloaded.content
     async with sessions() as db:
+        master_row = await db.get(Precedent, precedent_id)
+        assert (
+            master_row.name,
+            master_row.content_text,
+            master_row.file_path,
+            master_row.updated_at,
+            (await client.get(f"/api/v1/precedents/{precedent_id}/download")).content,
+        ) == master_snapshot
         row = await db.get(Document, document_id)
         assert row.source_precedent_id == precedent_id
         assert row.file_size == len(edited)
@@ -204,6 +222,26 @@ async def test_copy_download_edit_callback_and_versions(workflow, monkeypatch, k
         alerts = (await db.scalars(select(Notification))).all()
         assert len(alerts) == 1 and alerts[0].user_id == 3
         assert alerts[0].metadata_json["document_id"] == document_id
+
+    replacement = documents.render_docx_bytes("File-specific replacement")
+    replaced = await client.post(
+        f"/api/v1/documents/{document_id}/replace",
+        files={"file": ("replacement.docx", replacement, documents.DOCX_MIME_TYPE)},
+        data={"notes": "Matter-specific update"},
+    )
+    assert replaced.status_code == 200, replaced.text
+    assert replaced.json()["title"] == "../../Affidavit.docx"
+    assert replaced.json()["version"] == 3
+    assert (await client.get(f"/api/v1/documents/{document_id}/download")).content == replacement
+    async with sessions() as db:
+        master_row = await db.get(Precedent, precedent_id)
+        assert (
+            master_row.name,
+            master_row.content_text,
+            master_row.file_path,
+            master_row.updated_at,
+            (await client.get(f"/api/v1/precedents/{precedent_id}/download")).content,
+        ) == master_snapshot
 
 
 @pytest.mark.asyncio
@@ -249,6 +287,39 @@ async def test_standard_and_legacy_areas_roundtrip(workflow, area):
     assert created.status_code == 200, created.text
     assert created.json()["practice_area"] == area
     assert (await client.get("/api/v1/precedents")).json()["items"][0]["practice_area"] == area
+
+
+@pytest.mark.asyncio
+async def test_historical_test_precedent_remains_readable(workflow):
+    client, sessions, _ = workflow
+    precedent_id, _, _ = await create_precedent(client)
+    async with sessions() as db:
+        row = await db.get(Precedent, precedent_id)
+        row.practice_area = "Test"
+        await db.commit()
+
+    detail = await client.get(f"/api/v1/precedents/{precedent_id}")
+    assert detail.status_code == 200
+    assert detail.json()["practice_area"] == "Test"
+    listed = await client.get("/api/v1/precedents")
+    assert listed.status_code == 200
+    assert listed.json()["items"][0]["practice_area"] == "Test"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("copy_name", [None, "", "   "])
+async def test_copy_name_omission_or_whitespace_falls_back_to_master_title(workflow, copy_name):
+    client, _, _ = workflow
+    precedent_id, text, _ = await create_precedent(client)
+    payload = {"case_id": 1}
+    if copy_name is not None:
+        payload["name"] = copy_name
+    response = await client.post(f"/api/v1/precedents/{precedent_id}/copy-to-case", json=payload)
+    assert response.status_code == 200, response.text
+    copied = response.json()["document"]
+    assert copied["title"] == "Affidavit of Service"
+    assert copied["case_id"] == copied["client_id"] == 1
+    assert_word((await client.get(f"/api/v1/documents/{copied['id']}/download")).content, text)
 
 
 @pytest.mark.asyncio

@@ -6,16 +6,11 @@ import { apiDownload, apiRequest, apiUpload } from "../../../lib/api";
 import { getCachedUser } from "../../../lib/auth";
 import ProtectedFilePreviewModal, { useProtectedFilePreview } from "../../../components/ProtectedFilePreviewModal";
 import { formatViloDate, formatViloDateTime } from "../../../lib/dateFormat";
+import { buildPracticeAreaChoices, STANDARD_PRACTICE_AREAS } from "../../../lib/practiceAreas";
 
 const PRACTICE_TABS = [
   { value: "", label: "All Precedents" },
-  { value: "tort", label: "Tort" },
-  { value: "contracts", label: "Contracts" },
-  { value: "corporate", label: "Corporate" },
-  { value: "real_estate", label: "Real Estate" },
-  { value: "estate_probate", label: "Estate & Probate" },
-  { value: "intellectual_property", label: "Intellectual Property" },
-  { value: "trusts", label: "Trusts" },
+  ...STANDARD_PRACTICE_AREAS,
 ];
 
 const DOCUMENT_TYPE_OPTIONS = [
@@ -219,29 +214,16 @@ export default function PrecedentsPage() {
   const canManage = roleCanManage(role);
   const canView = roleCanView(role);
   const practiceTabs = useMemo(() => {
-    const known = new Set(PRACTICE_TABS.map((tab) => tab.value.toLocaleLowerCase()));
-    const dynamic = [];
-    [...practiceAreas.map((area) => area.name), ...precedents.map((row) => row.practice_area)]
-      .filter(Boolean)
-      .forEach((value) => {
-        const key = String(value).toLocaleLowerCase();
-        if (known.has(key)) return;
-        known.add(key);
-        dynamic.push({ value, label: formatPracticeArea(value) });
-      });
-    return [...PRACTICE_TABS, ...dynamic.sort((a, b) => a.label.localeCompare(b.label))];
+    const choices = buildPracticeAreaChoices([
+      ...practiceAreas.map((area) => area.name),
+      ...precedents.map((row) => row.practice_area),
+    ]).map((choice) => ({ ...choice, label: formatPracticeArea(choice.value) }));
+    return [PRACTICE_TABS[0], ...choices];
   }, [practiceAreas, precedents]);
-  const practiceChoices = useMemo(() => {
-    const choices = PRACTICE_TABS.filter((tab) => tab.value);
-    const known = new Set(choices.flatMap((tab) => [tab.value.toLowerCase(), tab.label.toLowerCase()]));
-    for (const area of practiceAreas) {
-      if (!known.has(area.name.toLowerCase())) {
-        choices.push({ value: area.name, label: `${formatPracticeArea(area.name)} (Custom)` });
-        known.add(area.name.toLowerCase());
-      }
-    }
-    return choices;
-  }, [practiceAreas]);
+  const practiceChoices = useMemo(
+    () => buildPracticeAreaChoices(practiceAreas.map((area) => area.name)),
+    [practiceAreas],
+  );
 
   useEffect(() => {
     if (!canView) return;
@@ -589,6 +571,10 @@ export default function PrecedentsPage() {
       setCopyError("Please select a case.");
       return;
     }
+    if (!copyForm.name.trim()) {
+      setCopyError("Document name is required.");
+      return;
+    }
 
     setCopySaving(true);
     try {
@@ -922,12 +908,13 @@ export default function PrecedentsPage() {
                     {filteredCases.map((row) => <option key={row.id} value={row.id}>{row.title}</option>)}
                   </select>
 
-                  <label htmlFor="copy-document-name">Document Name</label>
+                  <label htmlFor="copy-document-name">Document Name *</label>
                   <input
                     id="copy-document-name"
                     placeholder="Document Name"
                     value={copyForm.name}
                     onChange={(event) => setCopyForm((current) => ({ ...current, name: event.target.value }))}
+                    required
                   />
 
                   {casesLoading ? <p className="vilo-state vilo-state--loading">Loading cases...</p> : null}

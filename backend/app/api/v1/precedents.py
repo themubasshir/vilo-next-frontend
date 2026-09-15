@@ -126,7 +126,8 @@ async def get_case_or_404(db: AsyncSession, case_id: int, current_user: User) ->
 
 
 def build_copy_payload(precedent: Precedent, requested_name: str | None) -> tuple[str, bytes, str]:
-    title = (requested_name or precedent.name or precedent.file_name or "Precedent Copy").strip() or "Precedent Copy"
+    requested_title = (requested_name or "").strip()
+    title = requested_title or (precedent.name or precedent.file_name or "Precedent Copy").strip() or "Precedent Copy"
     if precedent.file_path:
         source_path = resolve_stored_file(precedent.file_path, PRECEDENT_STORAGE_ROOT)
         data = source_path.read_bytes()
@@ -170,6 +171,8 @@ async def create_practice_area(
     if not name:
         raise HTTPException(status_code=422, detail="Practice area name is required")
     normalized = name.casefold()
+    if normalized == "test":
+        raise HTTPException(status_code=422, detail="Test is not an available practice area")
     existing = await db.scalar(
         select(PracticeArea).where(
             PracticeArea.organization_id == current_user.organization_id,
