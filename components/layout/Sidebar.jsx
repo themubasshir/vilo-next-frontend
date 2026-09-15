@@ -321,7 +321,7 @@ function resolveNotificationHref(item) {
   const meta = item?.metadata || {};
   if (meta.conversation_id) return `/dashboard/messages?conversation=${meta.conversation_id}`;
   if (meta.message_id) return "/dashboard/messages";
-  if (meta.document_id) return "/dashboard/documents";
+  if (meta.document_id) return `/dashboard/documents?document_id=${encodeURIComponent(meta.document_id)}`;
   if (meta.invoice_id) return `/dashboard/invoices/${meta.invoice_id}`;
   if (meta.task_id) return `/dashboard/tasks/${meta.task_id}`;
   if (meta.calendar_event_id) return `/dashboard/calendar?event_id=${meta.calendar_event_id}`;

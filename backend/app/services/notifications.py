@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.case import Case, CaseAssignment
 from app.models.document import Document
-from app.models.enums import UserRole
+from app.models.enums import RecordStatus, UserRole
 from app.models.user import User
 
 from app.models.notification import Notification
@@ -73,8 +73,41 @@ async def bulk_create_notifications(
     return notifications
 
 
+async def notify_case_assigned(
+    db: AsyncSession,
+    *,
+    case: Case,
+    actor: User,
+    newly_assigned_user_ids: list[int] | set[int],
+) -> None:
+    """Notify same-firm staff who were newly assigned to a File."""
+    recipient_ids = sorted(set(newly_assigned_user_ids) - {actor.id})
+    if not recipient_ids:
+        return
+    valid_ids = (await db.scalars(
+        select(User.id).where(
+            User.id.in_(recipient_ids),
+            User.organization_id == case.organization_id,
+            User.role != UserRole.client,
+        )
+    )).all()
+    await bulk_create_notifications(
+        db,
+        organization_id=case.organization_id,
+        user_ids=list(valid_ids),
+        type="case_assigned",
+        title="Assigned to File",
+        body=f"{actor.name} assigned you to the case: {case.title or 'Untitled draft'}.",
+        metadata_json={
+            "case_id": case.id,
+            "actor_user_id": actor.id,
+            "link": f"/dashboard/cases/{case.id}",
+        },
+    )
+
+
 async def notify_case_document_added(db: AsyncSession, *, document: Document, actor_id: int) -> None:
-    """Notify only assigned, same-firm paralegals for a newly created File document."""
+    """Notify active, directly assigned same-firm staff of a new File document."""
     if document.case_id is None:
         return
     case = await db.scalar(select(Case).where(
@@ -86,7 +119,8 @@ async def notify_case_document_added(db: AsyncSession, *, document: Document, ac
         select(User.id).join(CaseAssignment, CaseAssignment.user_id == User.id).where(
             CaseAssignment.case_id == case.id,
             User.organization_id == document.organization_id,
-            User.role == UserRole.paralegal,
+            User.role != UserRole.client,
+            User.status == RecordStatus.active,
             User.id != actor_id,
         ).distinct()
     )).all()
@@ -99,8 +133,8 @@ async def notify_case_document_added(db: AsyncSession, *, document: Document, ac
         if existing is None:
             await create_notification(
                 db, organization_id=document.organization_id, user_id=user_id,
-                type="document_uploaded", title=f"New document in {case.title}"[:255],
-                body=document.title, dedupe_key=key,
+                type="document_uploaded", title="New File Document",
+                body=f"{document.title} was added to {case.title or 'Untitled draft'}.", dedupe_key=key,
                 metadata_json={"document_id": document.id, "case_id": case.id,
-                               "link": f"/dashboard/cases/{case.id}?tab=documents"},
+                               "link": f"/dashboard/documents?document_id={document.id}"},
             )

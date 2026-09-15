@@ -18,6 +18,8 @@ async def test_assignment_only_access_and_removal(workflow):
     cid = response.json()['id']
     async with sessions() as db:
         assert (await db.scalars(select(ClientAssignment))).all() == []
+        for notification in (await db.scalars(select(Notification))).all():
+            await db.delete(notification)
         db.add(CaseAssignment(case_id=2, user_id=3))  # malformed cross-tenant assignment
         await db.commit()
     response = await client.post('/api/v1/documents/upload', data={'title': 'Evidence', 'case_id': str(cid)}, files={'file': ('evidence.txt', b'proof', 'text/plain')})

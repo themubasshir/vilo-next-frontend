@@ -214,9 +214,14 @@ async def maybe_notify_assignee(
         organization_id=current_user.organization_id,
         user_id=task.assigned_to,
         type="task_assigned",
-        title=f"Task assigned: {task.title}",
-        body=f"You were assigned a task by {current_user.name}.",
-        metadata_json={"task_id": task.id, "case_id": task.case_id},
+        title="Task Assigned",
+        body=f"{current_user.name} assigned you to the task: {task.title}.",
+        metadata_json={
+            "task_id": task.id,
+            "case_id": task.case_id,
+            "actor_user_id": current_user.id,
+            "link": f"/dashboard/tasks/{task.id}",
+        },
     )
     if assignee.email:
         subject, html_body, text_body = build_task_assignment_email(assignee_name=assignee.name, task_title=task.title, task_id=task.id)

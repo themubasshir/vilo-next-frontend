@@ -9,11 +9,13 @@ from app.db.session import get_db
 from app.models.case import Case, CaseAssignment
 from app.models.case_timeline_event import CaseTimelineEvent
 from app.models.client import Client
+from app.models.enums import UserRole
 from app.models.user import User
 from app.schemas.case import AssignedUser, CaseAssignmentRequest, CaseCreate, CaseListResponse, CaseResponse, CaseStatusCount, CaseUpdate
 from app.schemas.timeline import CaseTimelineResponse, TimelineEventCreate, TimelineEventUpdate
 from app.services.audit import log_audit_event
 from app.services.access import accessible_case_condition, scope_cases
+from app.services.notifications import notify_case_assigned
 
 router = APIRouter(prefix="/cases", tags=["cases"])
 ALLOWED_STAFF = ["partner", "admin", "lawyer", "paralegal"]
@@ -34,6 +36,7 @@ async def get_case_or_404(db: AsyncSession, case_id: int, current_user: User) ->
         scope_cases(select(Case), current_user)
         .where(Case.id == case_id)
         .options(selectinload(Case.client), selectinload(Case.assignments).selectinload(CaseAssignment.user))
+        .execution_options(populate_existing=True)
     )
     if not case:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Case not found")
@@ -73,7 +76,11 @@ async def validate_assignments(db: AsyncSession, organization_id: int, user_ids:
     if not user_ids:
         return []
     rows = await db.scalars(
-        select(User).where(User.organization_id == organization_id, User.id.in_(user_ids))
+        select(User).where(
+            User.organization_id == organization_id,
+            User.id.in_(user_ids),
+            User.role != UserRole.client,
+        )
     )
     users = rows.all()
     if len(users) != len(set(user_ids)):
@@ -120,6 +127,12 @@ async def create_case(
 
     for user in users:
         db.add(CaseAssignment(case_id=case.id, user_id=user.id))
+    await notify_case_assigned(
+        db,
+        case=case,
+        actor=current_user,
+        newly_assigned_user_ids={user.id for user in users},
+    )
     await log_audit_event(
         db,
         organization_id=current_user.organization_id,
@@ -251,12 +264,19 @@ async def update_case(
         users = await validate_assignments(db, current_user.organization_id, payload.assigned_user_ids)
         existing_by_user = {a.user_id: a for a in case.assignments}
         wanted = set(payload.assigned_user_ids)
+        newly_assigned = wanted - set(existing_by_user)
         for assignment in list(case.assignments):
             if assignment.user_id not in wanted:
                 await db.delete(assignment)
         for user in users:
             if user.id not in existing_by_user:
                 db.add(CaseAssignment(case_id=case.id, user_id=user.id))
+        await notify_case_assigned(
+            db,
+            case=case,
+            actor=current_user,
+            newly_assigned_user_ids=newly_assigned,
+        )
 
     case.updated_at = datetime.now(timezone.utc)
     await log_audit_event(
@@ -310,9 +330,17 @@ async def assign_case_team(
     users = await validate_assignments(db, current_user.organization_id, payload.user_ids)
 
     existing = {a.user_id for a in case.assignments}
+    newly_assigned = {user.id for user in users} - existing
     for user in users:
         if user.id not in existing:
             db.add(CaseAssignment(case_id=case.id, user_id=user.id))
+
+    await notify_case_assigned(
+        db,
+        case=case,
+        actor=current_user,
+        newly_assigned_user_ids=newly_assigned,
+    )
 
     case.updated_at = datetime.now(timezone.utc)
     await db.commit()

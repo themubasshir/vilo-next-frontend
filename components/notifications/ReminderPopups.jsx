@@ -148,6 +148,8 @@ export function ReminderPopups() {
   const schedule = formatSchedule(metadata);
   const isMessage = current.type === "message_received";
   const isTask = Boolean(metadata.task_id) || current.type.startsWith("task_");
+  const isDocument = Boolean(metadata.document_id);
+  const isCase = Boolean(metadata.case_id);
 
   return (
     <section
@@ -183,7 +185,7 @@ export function ReminderPopups() {
           Dismiss
         </button>
         <button ref={actionButtonRef} type="button" className="vilo-btn vilo-btn--primary" onClick={viewReminder} disabled={busy}>
-          {isMessage ? "Open Message" : isTask ? "View Task" : "View Event"}
+          {isMessage ? "Open Message" : isDocument ? "View Document" : isTask ? "View Task" : isCase ? "View File" : "View Event"}
         </button>
       </div>
     </section>

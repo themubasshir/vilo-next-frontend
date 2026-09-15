@@ -11,7 +11,7 @@ from app.models.user import User
 from app.schemas.notification import MarkNotificationsReadRequest, NotificationListResponse, NotificationResponse, PopupDismissResponse, PopupReminderListResponse
 from app.services.reminders import REMINDER_TYPES, process_due_reminders
 
-POPUP_TYPES = (*REMINDER_TYPES, "message_received")
+POPUP_TYPES = (*REMINDER_TYPES, "message_received", "case_assigned", "task_assigned", "document_uploaded")
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
 

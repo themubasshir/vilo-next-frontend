@@ -1,6 +1,7 @@
 "use client";
 
-import CaseAssignees from "../../../../components/dashboard/CaseAssignees";
+import CaseTeamMembers from "../../../../components/dashboard/CaseTeamMembers";
+import CaseTeamPicker from "../../../../components/dashboard/CaseTeamPicker";
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
@@ -101,7 +102,7 @@ export default function CaseDetailPage() {
   const [noteForm, setNoteForm] = useState({ note: "", visibility: "internal" });
   const [taskForm, setTaskForm] = useState({ title: "", description: "", status: "pending", priority: "medium", due_date: "", assigned_to: "" });
   const [docForm, setDocForm] = useState({ title: "", description: "", category: "", visibility: "internal", file: null });
-  const [selectedAssigneeId, setSelectedAssigneeId] = useState("");
+  const [selectedTeamIds, setSelectedTeamIds] = useState([]);
 
   async function load() {
     setLoading(true);
@@ -347,38 +348,29 @@ export default function CaseDetailPage() {
     }
   }
 
-  async function assignTeamMember() {
-    if (!selectedAssigneeId) return;
-    setSubmitting(true);
-    setError("");
-    try {
-      await apiRequest(`/api/v1/cases/${id}/assign`, {
-        method: "POST",
-        body: JSON.stringify({ user_ids: [Number(selectedAssigneeId)] }),
-      });
-      setSelectedAssigneeId("");
-      await load();
-    } catch (err) {
-      setError(err.message || "Failed to assign user");
-    } finally {
-      setSubmitting(false);
-    }
+  function openTeamManager() {
+    setSelectedTeamIds((item?.assigned_users || []).map((member) => Number(member.id)));
+    setModalType("manage-team");
   }
 
-  async function unassignTeamMember(userId) {
-    if (!item) return;
+  function toggleTeamMember(userId) {
+    setSelectedTeamIds((current) => current.includes(userId)
+      ? current.filter((id) => id !== userId)
+      : [...current, userId]);
+  }
+
+  async function saveTeam() {
     setSubmitting(true);
     setError("");
     try {
-      const remaining = (item.assigned_users || []).filter((u) => u.id !== userId).map((u) => u.id);
       const updated = await apiRequest(`/api/v1/cases/${id}`, {
         method: "PATCH",
-        body: JSON.stringify({ assigned_user_ids: remaining }),
+        body: JSON.stringify({ assigned_user_ids: selectedTeamIds }),
       });
       setItem(updated);
-      await load();
+      setModalType("");
     } catch (err) {
-      setError(err.message || "Failed to remove user");
+      setError(err.message || "Failed to save team");
     } finally {
       setSubmitting(false);
     }
@@ -499,8 +491,8 @@ export default function CaseDetailPage() {
               <div className="case-summary-box"><span>Expected Completion:</span><strong>{item.expected_completion_date ? fmtDate(item.expected_completion_date) : "Not set"}</strong></div>
             </div>
             <div className="case-summary-description">
-              <span>Assignees:</span>
-              <CaseAssignees users={item.assigned_users} />
+              <span>Team Members:</span>
+              <CaseTeamMembers users={item.assigned_users} />
             </div>
             <div className="case-summary-description">
               <span>Description:</span>
@@ -637,12 +629,12 @@ export default function CaseDetailPage() {
               <div className="case-tab-panel">
                 <div className="case-tab-headline-row">
                   <h2>Team Members</h2>
-                  <button type="button" className="vilo-btn vilo-btn--secondary" onClick={() => setModalType("add-team")}>Assign Team Member</button>
+                  <button type="button" className="vilo-btn vilo-btn--secondary" onClick={openTeamManager}>Manage Team</button>
                 </div>
                 {item.assigned_users?.length ? (
                   <div className="vilo-table-wrap case-table-wrap">
                     <table className="team-table">
-                      <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Action</th></tr></thead>
+                      <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th></tr></thead>
                       <tbody>
                         {item.assigned_users.map((u) => (
                           <tr key={u.id}>
@@ -650,7 +642,6 @@ export default function CaseDetailPage() {
                             <td>{u.email}</td>
                             <td><span className={`vilo-badge vilo-badge--${u.role}`}>{u.role}</span></td>
                             <td><span className={`vilo-badge ${u.status === "active" ? "vilo-badge--active" : "vilo-badge--cancelled"}`}>{u.status}</span></td>
-                            <td><button type="button" className="vilo-btn vilo-btn--ghost vilo-btn--xs" onClick={() => unassignTeamMember(u.id)} disabled={submitting}>Remove</button></td>
                           </tr>
                         ))}
                       </tbody>
@@ -918,18 +909,16 @@ export default function CaseDetailPage() {
         </Modal>
       ) : null}
 
-      {modalType === "add-team" ? (
-        <Modal title="Assign Team Member" onClose={() => setModalType("")}>
+      {modalType === "manage-team" ? (
+        <Modal title="Manage Team Members" onClose={() => setModalType("")}>
           <div className="vilo-form-grid">
-            <select value={selectedAssigneeId} onChange={(e) => setSelectedAssigneeId(e.target.value)}>
-              <option value="">Select team member</option>
-              {team.filter((u) => !(item?.assigned_users || []).some((a) => a.id === u.id)).map((u) => (
-                <option key={u.id} value={u.id}>{u.name} ({u.role})</option>
-              ))}
-            </select>
-            <button className="vilo-btn vilo-btn--primary" type="button" onClick={assignTeamMember} disabled={!selectedAssigneeId || submitting}>
-              {submitting ? "Assigning..." : "Assign Team Member"}
-            </button>
+            <CaseTeamPicker team={team} selectedIds={selectedTeamIds} onToggle={toggleTeamMember} />
+            <div className="vilo-modal__footer">
+              <button className="vilo-btn vilo-btn--secondary" type="button" onClick={() => setModalType("")} disabled={submitting}>Cancel</button>
+              <button className="vilo-btn vilo-btn--primary" type="button" onClick={saveTeam} disabled={submitting}>
+                {submitting ? "Saving..." : "Save Team"}
+              </button>
+            </div>
           </div>
         </Modal>
       ) : null}

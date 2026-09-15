@@ -9808,17 +9808,81 @@ button {
   width: 12rem;
 }
 
-.case-assignees {
+.case-team-members {
   display: grid;
   gap: 0.15rem;
   min-width: 0;
   max-width: 100%;
 }
 
-.case-assignees > span {
+.case-team-members > span {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.case-team-picker {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.case-team-picker legend {
+  font-weight: 650;
+  color: #494460;
+}
+
+.case-team-picker__count {
+  margin: 0.35rem 0 0.55rem;
+  color: #6f6984;
+  font-size: 0.86rem;
+}
+
+.case-team-picker__list {
+  display: grid;
+  gap: 0.4rem;
+  max-height: 18rem;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.case-team-picker__option {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.65rem;
+  min-width: 0;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid #e2ddf2;
+  border-radius: 8px;
+  background: #fff;
+  cursor: pointer;
+}
+
+.case-team-picker__option.is-selected {
+  border-color: #725ce8;
+  background: #f7f5ff;
+}
+
+.case-team-picker__option > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.case-team-picker__option > small {
+  color: #777189;
+  text-transform: capitalize;
+}
+
+@media (max-width: 520px) {
+  .case-team-picker__option {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .case-team-picker__option > small {
+    grid-column: 2;
+  }
 }
 
 .document-file-selection, .document-selection-list { min-width: 0; max-width: 100%; }

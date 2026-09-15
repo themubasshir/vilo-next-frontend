@@ -173,8 +173,8 @@ async def test_file_upload_recipients_metadata_dedupe_and_replace(messaging, rol
         rows = (await db.scalars(select(Notification))).all()
         assert (await db.scalars(select(ClientAssignment))).all() == []
         assert len(rows) == 1 and rows[0].user_id == 3 and rows[0].organization_id == 1
-        assert rows[0].type == 'document_uploaded' and rows[0].title == 'New document in File 1' and rows[0].body == 'Evidence'
-        assert rows[0].metadata_json == {'document_id': doc['id'], 'case_id': 1, 'link': '/dashboard/cases/1?tab=documents'}
+        assert rows[0].type == 'document_uploaded' and rows[0].title == 'New File Document' and rows[0].body == 'Evidence was added to File 1.'
+        assert rows[0].metadata_json == {'document_id': doc['id'], 'case_id': 1, 'link': f"/dashboard/documents?document_id={doc['id']}"}
         assert rows[0].email_status is None
         await notify_case_document_added(db, document=await db.get(Document, doc['id']), actor_id=1)
         await db.commit()
@@ -203,7 +203,7 @@ async def test_no_case_and_client_ids_do_not_notify_and_client_share_survives(me
 
 
 @pytest.mark.asyncio
-async def test_precedent_copy_notifies_assigned_paralegal_once(messaging):
+async def test_precedent_copy_notifies_assigned_team_member_once(messaging):
     client, sessions, actor = messaging
     pid, _, _ = await create_precedent(client)
     response = await client.post(f'/api/v1/precedents/{pid}/copy-to-case', json={'case_id': 1})
@@ -220,7 +220,7 @@ async def test_precedent_copy_notifies_assigned_paralegal_once(messaging):
 
 
 @pytest.mark.asyncio
-async def test_multiple_assigned_paralegals_each_receive_one(messaging):
+async def test_multiple_assigned_team_members_each_receive_one(messaging):
     client, sessions, actor = messaging
     async with sessions() as db:
         db.add(CaseAssignment(case_id=1, user_id=4))
