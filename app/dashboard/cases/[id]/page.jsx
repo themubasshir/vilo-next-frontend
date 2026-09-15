@@ -1,6 +1,6 @@
 "use client";
 
-import AssignedParalegals from "../../../../components/dashboard/AssignedParalegals";
+import CaseAssignees from "../../../../components/dashboard/CaseAssignees";
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
@@ -499,8 +499,8 @@ export default function CaseDetailPage() {
               <div className="case-summary-box"><span>Expected Completion:</span><strong>{item.expected_completion_date ? fmtDate(item.expected_completion_date) : "Not set"}</strong></div>
             </div>
             <div className="case-summary-description">
-              <span>Assigned Paralegals:</span>
-              <AssignedParalegals users={item.assigned_users} />
+              <span>Assignees:</span>
+              <CaseAssignees users={item.assigned_users} />
             </div>
             <div className="case-summary-description">
               <span>Description:</span>

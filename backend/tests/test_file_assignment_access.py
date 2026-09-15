@@ -66,12 +66,12 @@ async def test_privileged_access_and_required_client(workflow, role):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('assigned', [[3], [3, 4], [3, 5], [5], []])
+@pytest.mark.parametrize('assigned', [[3], [3, 4], [3, 5], [5], [1, 3, 4, 5, 6], []])
 async def test_query_serializes_assignee_roles(workflow, assigned):
     client, sessions, actor = workflow
     now = datetime.now(timezone.utc)
     async with sessions() as db:
-        for uid, role in ((4, UserRole.paralegal), (5, UserRole.lawyer)):
+        for uid, role in ((4, UserRole.paralegal), (5, UserRole.lawyer), (6, UserRole.admin)):
             db.add(User(id=uid, organization_id=1, name=f'Team {uid}', email=f'team{uid}@example.test', hashed_password='unused', role=role, created_at=now, updated_at=now))
         await db.commit()
     response = await client.post('/api/v1/cases/1/assign', json={'user_ids': assigned})
@@ -82,5 +82,7 @@ async def test_query_serializes_assignee_roles(workflow, assigned):
     assert {u['id'] for u in row['assigned_users']} == set(assigned)
     assert {u['id'] for u in row['assigned_users'] if u['role'] == 'paralegal'} == set(assigned) & {3, 4}
     assert all({'name', 'email', 'role', 'status'} <= u.keys() for u in row['assigned_users'])
+    if assigned == [1, 3, 4, 5, 6]:
+        assert {u['role'] for u in row['assigned_users']} == {'partner', 'paralegal', 'lawyer', 'admin'}
     async with sessions() as db:
         assert (await db.scalars(select(ClientAssignment))).all() == []

@@ -1,6 +1,6 @@
 "use client";
 
-import AssignedParalegals from "../../../components/dashboard/AssignedParalegals";
+import CaseAssignees from "../../../components/dashboard/CaseAssignees";
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -386,7 +386,7 @@ function CasesPageContent() {
                   <th className="case-badge-cell">Status</th>
                   <th className="case-badge-cell">Priority</th>
                   <th className="case-client-cell">Client</th>
-                  <th className="case-paralegal-cell">Paralegal(s)</th>
+                  <th className="case-assignee-cell">Assignees</th>
                   <th className="case-action-cell">Actions</th>
                 </tr>
               </thead>
@@ -397,7 +397,7 @@ function CasesPageContent() {
                     <td className="case-badge-cell"><span className={`vilo-badge vilo-badge--${c.status}`}>{c.status}</span></td>
                     <td className="case-badge-cell"><span className={`vilo-badge vilo-badge--priority-${c.priority}`}>{c.priority}</span></td>
                     <td className="case-client-cell">{c.client_name || `#${c.client_id}`}</td>
-                    <td className="case-paralegal-cell"><AssignedParalegals users={c.assigned_users} /></td>
+                    <td className="case-assignee-cell"><CaseAssignees users={c.assigned_users} /></td>
                     <td className="case-action-cell" onClick={(e) => e.stopPropagation()}>
                       <div className="vilo-table-actions case-row-actions">
                         <button

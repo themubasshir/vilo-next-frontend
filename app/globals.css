@@ -9804,18 +9804,18 @@ button {
   overflow-wrap: anywhere;
 }
 
-.case-list-table .case-paralegal-cell {
+.case-list-table .case-assignee-cell {
   width: 12rem;
 }
 
-.case-paralegals {
+.case-assignees {
   display: grid;
   gap: 0.15rem;
   min-width: 0;
   max-width: 100%;
 }
 
-.case-paralegals > span {
+.case-assignees > span {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
