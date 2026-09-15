@@ -5,6 +5,8 @@ import { Suspense, useEffect, useMemo, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import { getCachedUser, setCachedUser } from "../../../../lib/auth";
 import { apiDownload, apiRequest } from "../../../../lib/api";
+import { formatViloDate } from "../../../../lib/dateFormat";
+import ViloDateInput from "../../../../components/ViloDateInput";
 
 const LINE_ITEM_TYPE_OPTIONS = [
   ["legal_fee", "Legal Fee"],
@@ -29,10 +31,7 @@ function formatMoney(value, currency = "USD") {
 }
 
 function formatDate(value) {
-  if (!value) return "-";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  return formatViloDate(value);
 }
 
 function invoiceCurrency(invoice) {
@@ -727,8 +726,8 @@ function InvoiceDetailInner() {
             </div>
 
             <div className="vilo-form-row-two">
-              <input type="date" value={editForm.issue_date} onChange={(event) => setEditForm((current) => ({ ...current, issue_date: event.target.value }))} required />
-              <input type="date" value={editForm.due_date} onChange={(event) => setEditForm((current) => ({ ...current, due_date: event.target.value }))} />
+              <ViloDateInput value={editForm.issue_date} onChange={(value) => setEditForm((current) => ({ ...current, issue_date: value }))} required />
+              <ViloDateInput value={editForm.due_date} onChange={(value) => setEditForm((current) => ({ ...current, due_date: value }))} />
             </div>
             <div className="vilo-form-row-two">
               <input value={editForm.client_id ? `Client #${editForm.client_id}` : editForm.manual_client_name || "Manual recipient"} readOnly placeholder="Invoice recipient" />
@@ -838,7 +837,7 @@ function InvoiceDetailInner() {
               </select>
             </div>
             <div className="vilo-form-row-two">
-              <input type="date" value={applyForm.payment_date} onChange={(event) => setApplyForm((current) => ({ ...current, payment_date: event.target.value }))} />
+              <ViloDateInput value={applyForm.payment_date} onChange={(value) => setApplyForm((current) => ({ ...current, payment_date: value }))} />
               <input placeholder="External reference / check number" value={applyForm.external_reference_number} onChange={(event) => setApplyForm((current) => ({ ...current, external_reference_number: event.target.value }))} />
             </div>
             <textarea placeholder="Description" value={applyForm.description} onChange={(event) => setApplyForm((current) => ({ ...current, description: event.target.value }))} />

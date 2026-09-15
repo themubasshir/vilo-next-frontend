@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { apiDownload, apiRequest } from "../../../lib/api";
+import { formatViloDate } from "../../../lib/dateFormat";
+import ViloDateInput from "../../../components/ViloDateInput";
 
 const TABS = ["cases", "financial", "trust", "tasks", "activity"];
 
@@ -10,10 +12,7 @@ function fmtCurrency(value) {
 }
 
 function fmtDate(value) {
-  if (!value) return "-";
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return "-";
-  return d.toLocaleString();
+  return formatViloDate(value);
 }
 
 export default function ReportsPage() {
@@ -106,8 +105,8 @@ export default function ReportsPage() {
 
           {tab === "financial" ? (
             <div className="vilo-form-row-two">
-              <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
-              <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+              <ViloDateInput value={dateFrom} onChange={setDateFrom} aria-label="Date from" />
+              <ViloDateInput value={dateTo} onChange={setDateTo} aria-label="Date to" />
             </div>
           ) : null}
           {pdfPath ? <button className="vilo-btn vilo-btn--primary" type="button" onClick={() => apiDownload(pdfPath)}>Export Report PDF</button> : null}

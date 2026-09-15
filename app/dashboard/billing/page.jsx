@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { getCachedUser, setCachedUser } from "../../../lib/auth";
 import { apiRequest } from "../../../lib/api";
+import ViloDateInput from "../../../components/ViloDateInput";
 
 const REPORT_TABS = [
   { id: "revenue", label: "Revenue by Staff Member" },
@@ -292,8 +293,8 @@ export default function BillingPage() {
               <span>Shows actual revenue collected from paid invoices. Time logged is not counted as revenue.</span>
             </article>
             <div className="billing-report-filters">
-              <input type="date" value={revenueFilters.date_from} onChange={(event) => setRevenueFilters((current) => ({ ...current, date_from: event.target.value }))} />
-              <input type="date" value={revenueFilters.date_to} onChange={(event) => setRevenueFilters((current) => ({ ...current, date_to: event.target.value }))} />
+              <ViloDateInput value={revenueFilters.date_from} onChange={(value) => setRevenueFilters((current) => ({ ...current, date_from: value }))} />
+              <ViloDateInput value={revenueFilters.date_to} onChange={(value) => setRevenueFilters((current) => ({ ...current, date_to: value }))} />
               <select value={revenueFilters.staff_user_id} onChange={(event) => setRevenueFilters((current) => ({ ...current, staff_user_id: event.target.value }))}>
                 <option value="">All staff</option>
                 {staff.map((user) => <option key={user.id} value={user.id}>{user.name} ({user.role})</option>)}
@@ -312,8 +313,8 @@ export default function BillingPage() {
               <span>Shows work performed from billable time entries. This is not revenue until invoices are paid.</span>
             </article>
             <div className="billing-report-filters">
-              <input type="date" value={timeFilters.date_from} onChange={(event) => setTimeFilters((current) => ({ ...current, date_from: event.target.value }))} />
-              <input type="date" value={timeFilters.date_to} onChange={(event) => setTimeFilters((current) => ({ ...current, date_to: event.target.value }))} />
+              <ViloDateInput value={timeFilters.date_from} onChange={(value) => setTimeFilters((current) => ({ ...current, date_from: value }))} />
+              <ViloDateInput value={timeFilters.date_to} onChange={(value) => setTimeFilters((current) => ({ ...current, date_to: value }))} />
               <select value={timeFilters.staff_user_id} onChange={(event) => setTimeFilters((current) => ({ ...current, staff_user_id: event.target.value }))}>
                 <option value="">All staff</option>
                 {staff.map((user) => <option key={user.id} value={user.id}>{user.name} ({user.role})</option>)}

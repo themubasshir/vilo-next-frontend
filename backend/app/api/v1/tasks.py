@@ -34,7 +34,7 @@ STATUS_ALIASES = {
 VALID_PRIORITY = {"low", "medium", "high", "urgent"}
 PRIORITY_ALIASES = {"normal": "medium", "critical": "urgent"}
 VALID_TASK_TYPES = {"general", "deadline", "court", "client_follow_up", "document", "billing", "other"}
-NON_ADMIN_WORKFLOW_FIELDS = {"status"}
+WORKFLOW_ONLY_FIELDS = {"status"}
 TASK_TYPE_ALIASES = {
     "client-follow-up": "client_follow_up",
     "follow_up": "client_follow_up",
@@ -397,7 +397,7 @@ async def update_task(
 ):
     task = await get_task_or_404(db, current_user.organization_id, task_id)
     updates = payload.model_dump(exclude_unset=True)
-    if current_user.role != UserRole.admin and not set(updates).issubset(NON_ADMIN_WORKFLOW_FIELDS):
+    if current_user.role not in {UserRole.admin, UserRole.partner} and not set(updates).issubset(WORKFLOW_ONLY_FIELDS):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not have permission to edit this task.")
     reminder_material_fields = {"due_date", "reminder_at", "status", "archived_at", "assigned_to", "case_id", "client_id", "title"}
     if reminder_material_fields.intersection(updates):

@@ -4,6 +4,8 @@ import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { apiRequest } from "../../../lib/api";
 import { DiscardChangesDialog, useModalCloseGuard } from "../../../components/useModalCloseGuard";
+import { formatViloDate } from "../../../lib/dateFormat";
+import ViloDateInput from "../../../components/ViloDateInput";
 
 const VIEW_OPTIONS = ["month", "week", "day"];
 const FILTER_OPTIONS = [
@@ -86,11 +88,11 @@ function formatTime(dateStr) {
 }
 
 function formatEventDate(date) {
-  return date.toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" });
+  return formatViloDate(date);
 }
 
 function formatLongDate(date) {
-  return date.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric", year: "numeric" });
+  return formatViloDate(date);
 }
 
 function parseDateValue(value) {
@@ -622,7 +624,7 @@ function CalendarPageContent() {
                 const list = activeFilter === "all" ? (itemsByDay.get(key) || []) : (filteredItemsByDay.get(key) || []);
                 return (
                   <div key={key} className="calendar-list-day">
-                    <h3>{day.toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" })}</h3>
+                    <h3>{formatViloDate(day)}</h3>
                     {list.length ? list.map((item) => (
                       <button
                         key={`${item.source_type}-${item.id}`}
@@ -755,7 +757,7 @@ function CalendarPageContent() {
             <div className="vilo-modal__header calendar-event-modal__header">
               <div>
                 <h3>{editingEvent ? "Edit Event" : "Add Event"}</h3>
-                <p className="calendar-event-modal__copy">{editingEvent ? "Update this calendar event." : `Create an event for ${form.date || selectedDateKey}.`}</p>
+                <p className="calendar-event-modal__copy">{editingEvent ? "Update this calendar event." : `Create an event for ${formatViloDate(form.date || selectedDateKey)}.`}</p>
               </div>
               <button className="calendar-event-modal__close" type="button" onClick={eventCloseGuard.requestClose} aria-label="Close add event form">×</button>
             </div>
@@ -772,7 +774,7 @@ function CalendarPageContent() {
                 <div className="calendar-event-modal__grid">
                   <div className="calendar-event-modal__field">
                     <label htmlFor="calendar-event-date">Date *</label>
-                    <input id="calendar-event-date" type="date" value={form.date} onChange={(event) => setForm({ ...form, date: event.target.value })} required />
+                    <ViloDateInput id="calendar-event-date" value={form.date} onChange={(value) => setForm({ ...form, date: value })} required />
                   </div>
                   <div className="calendar-event-modal__field">
                     <label htmlFor="calendar-event-type">Type / Category *</label>
@@ -792,7 +794,7 @@ function CalendarPageContent() {
                   {form.reminder_choice === "custom" ? (
                     <div className="calendar-event-modal__field">
                       <label htmlFor="calendar-event-custom-reminder">Custom reminder</label>
-                      <input id="calendar-event-custom-reminder" type="datetime-local" value={form.custom_reminder_at} onChange={(event) => setForm({ ...form, custom_reminder_at: event.target.value })} />
+                      <ViloDateInput id="calendar-event-custom-reminder" includeTime value={form.custom_reminder_at} onChange={(value) => setForm({ ...form, custom_reminder_at: value })} />
                     </div>
                   ) : <div className="calendar-event-modal__field" />}
                 </div>

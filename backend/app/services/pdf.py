@@ -51,6 +51,26 @@ def _safe_text(value: str | None) -> str:
     return (value or "-").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
+def _display_date(value: date | datetime | None) -> str:
+    if value is None:
+        return "-"
+    return value.strftime("%d/%m/%Y")
+
+
+def _display_datetime(value: datetime | None) -> str:
+    if value is None:
+        return "-"
+    return f"{value.strftime('%d/%m/%Y')}, {value.strftime('%I:%M %p').lstrip('0')}"
+
+
+def _display_filter(value):
+    if isinstance(value, datetime):
+        return _display_datetime(value)
+    if isinstance(value, date):
+        return _display_date(value)
+    return value
+
+
 def _time_entry_date_expr():
     return func.date(func.coalesce(TimeEntry.start_time, TimeEntry.created_at))
 
@@ -103,7 +123,7 @@ def _footer(canvas, _doc):
     canvas.setFont("Helvetica", 8)
     canvas.setFillColor(colors.HexColor("#677085"))
     canvas.drawString(45, 30, "VILO Confidential")
-    canvas.drawRightString(567, 30, f"Generated {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}")
+    canvas.drawRightString(567, 30, f"Generated {_display_datetime(datetime.now(timezone.utc))}")
     canvas.restoreState()
 
 
@@ -140,7 +160,7 @@ async def generate_invoice_pdf(invoice_id: int, *, db: AsyncSession, organizatio
                 Paragraph("<br/>".join(_safe_text(line) for line in build_firm_details(org)), styles["ViloBody"]),
                 Paragraph(f"{_safe_text(recipient_name)}<br/>{_safe_text(getattr(client, 'email', None))}<br/>{_safe_text(getattr(client, 'phone', None))}", styles["ViloBody"]),
                 Paragraph(
-                    f"Invoice #: {_safe_text(inv.invoice_number)}<br/>Issue Date: {inv.issue_date}<br/>Due Date: {inv.due_date or '-'}<br/>Status: {_safe_text(inv.status)}",
+                    f"Invoice #: {_safe_text(inv.invoice_number)}<br/>Issue Date: {_display_date(inv.issue_date)}<br/>Due Date: {_display_date(inv.due_date)}<br/>Status: {_safe_text(inv.status)}",
                     styles["ViloBody"],
                 ),
             ],
@@ -255,8 +275,8 @@ async def generate_trust_receipt_pdf(receipt_id: int, *, db: AsyncSession, organ
                         [
                             f"Receipt ID: {_safe_text(receipt.receipt_number)}",
                             f"System Ref: {_safe_text(getattr(transaction, 'reference_number', None))}",
-                            f"Date Received: {_safe_text(str(transaction.transaction_date if transaction else '-'))}",
-                            f"Created: {_safe_text(receipt.issued_at.strftime('%Y-%m-%d %H:%M UTC'))}",
+                            f"Date Received: {_display_date(transaction.transaction_date if transaction else None)}",
+                            f"Created: {_display_datetime(receipt.issued_at)}",
                         ]
                     ),
                     styles["ViloBody"],
@@ -310,9 +330,9 @@ async def generate_report_pdf(report_type: str, filters: dict | None = None, *, 
     doc, styles = _build_doc(path)
     story = [Paragraph("VILO", styles["ViloH1"]), Paragraph(f"{report_type.title()} Report", styles["ViloBody"]), Spacer(1, 12)]
     story.append(Paragraph(f"Organization: {_safe_text(org.name if org else str(organization_id))}", styles["ViloBody"]))
-    story.append(Paragraph(f"Generated On: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}", styles["ViloBody"]))
+    story.append(Paragraph(f"Generated On: {_display_datetime(datetime.now(timezone.utc))}", styles["ViloBody"]))
     if filters:
-        story.append(Paragraph(f"Filters: {_safe_text(', '.join(f'{k}={v}' for k, v in filters.items() if v not in (None, '')))}", styles["ViloBody"]))
+        story.append(Paragraph(f"Filters: {_safe_text(', '.join(f'{k}={_display_filter(v)}' for k, v in filters.items() if v not in (None, '')))}", styles["ViloBody"]))
     story.append(Spacer(1, 12))
 
     if report_type == "financial":
@@ -361,7 +381,7 @@ async def generate_report_pdf(report_type: str, filters: dict | None = None, *, 
         by_client_tbl.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1f2a44")), ("TEXTCOLOR", (0, 0), (-1, 0), colors.white), ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#d9deea"))]))
         story.extend([Paragraph("Balances by Client", styles["ViloH2"]), by_client_tbl, Spacer(1, 10)])
 
-        recent_rows = [[str(r.id), r.transaction_type, str(r.client_id or "-"), str(r.case_id or "-"), _money(Decimal(str(r.amount or 0))), str(r.transaction_date)] for r in recent]
+        recent_rows = [[str(r.id), r.transaction_type, str(r.client_id or "-"), str(r.case_id or "-"), _money(Decimal(str(r.amount or 0))), _display_date(r.transaction_date)] for r in recent]
         recent_tbl = Table([["ID", "Type", "Client", "Case", "Amount", "Date"]] + (recent_rows if recent_rows else [["-", "-", "-", "-", _money(0), "-"]]), colWidths=[0.6 * inch, 1.2 * inch, 0.8 * inch, 0.8 * inch, 1.1 * inch, 1.9 * inch])
         recent_tbl.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1f2a44")), ("TEXTCOLOR", (0, 0), (-1, 0), colors.white), ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#d9deea"))]))
         story.extend([Paragraph("Recent Transactions", styles["ViloH2"]), recent_tbl])
@@ -380,7 +400,7 @@ async def generate_report_pdf(report_type: str, filters: dict | None = None, *, 
             filters_clause.append(func.date(Case.created_at) <= filters["date_to"])
 
         rows = (await db.execute(select(Case.id, Case.title, Case.status, Case.priority, Case.client_id, Case.created_at).where(and_(*filters_clause)).order_by(Case.created_at.desc()))).all()
-        case_rows = [[str(r.id), r.title, str(r.status), str(r.priority), str(r.client_id), str(r.created_at.date())] for r in rows]
+        case_rows = [[str(r.id), r.title, str(r.status), str(r.priority), str(r.client_id), _display_date(r.created_at)] for r in rows]
         case_tbl = Table([["ID", "Title", "Status", "Priority", "Client", "Created"]] + (case_rows if case_rows else [["-", "No cases", "-", "-", "-", "-"]]), colWidths=[0.5 * inch, 2.5 * inch, 1.0 * inch, 1.0 * inch, 0.7 * inch, 1.1 * inch])
         case_tbl.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1f2a44")), ("TEXTCOLOR", (0, 0), (-1, 0), colors.white), ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#d9deea"))]))
         story.append(case_tbl)

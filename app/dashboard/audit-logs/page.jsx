@@ -2,11 +2,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { apiRequest } from "../../../lib/api";
+import { formatViloDateTime } from "../../../lib/dateFormat";
+import ViloDateInput from "../../../components/ViloDateInput";
 
 function fmtDate(value) {
-  if (!value) return "-";
-  const d = new Date(value);
-  return Number.isNaN(d.getTime()) ? "-" : d.toLocaleString();
+  return formatViloDateTime(value);
 }
 
 export default function AuditLogsPage() {
@@ -66,8 +66,8 @@ export default function AuditLogsPage() {
           <input placeholder="Action (e.g. invoice_sent)" value={action} onChange={(e) => { setPage(1); setAction(e.target.value); }} />
           <input placeholder="Entity type (e.g. case)" value={entityType} onChange={(e) => { setPage(1); setEntityType(e.target.value); }} />
           <input placeholder="User ID" value={userId} onChange={(e) => { setPage(1); setUserId(e.target.value); }} />
-          <input type="datetime-local" value={dateFrom} onChange={(e) => { setPage(1); setDateFrom(e.target.value); }} />
-          <input type="datetime-local" value={dateTo} onChange={(e) => { setPage(1); setDateTo(e.target.value); }} />
+          <ViloDateInput includeTime value={dateFrom} onChange={(value) => { setPage(1); setDateFrom(value); }} />
+          <ViloDateInput includeTime value={dateTo} onChange={(value) => { setPage(1); setDateTo(value); }} />
           <select value={pageSize} onChange={(e) => { setPage(1); setPageSize(Number(e.target.value)); }}>
             <option value={10}>10</option>
             <option value={20}>20</option>

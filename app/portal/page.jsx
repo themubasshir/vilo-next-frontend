@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { apiRequest } from "../../lib/api";
+import { formatViloDateTime } from "../../lib/dateFormat";
 
 function money(value) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(Number(value || 0));
@@ -68,7 +69,7 @@ export default function PortalHomePage() {
                   <thead><tr><th>Event</th><th>Date</th></tr></thead>
                   <tbody>
                     {activity.slice(0, 10).map((item) => (
-                      <tr key={item.id}><td>{item.title}</td><td>{new Date(item.created_at).toLocaleString()}</td></tr>
+                      <tr key={item.id}><td>{item.title}</td><td>{formatViloDateTime(item.created_at)}</td></tr>
                     ))}
                   </tbody>
                 </table>

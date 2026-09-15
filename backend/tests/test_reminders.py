@@ -218,7 +218,7 @@ def test_reminder_email_has_absolute_link_utc_details_and_escaped_html(monkeypat
     )
     assert subject == "VILO Court Event Reminder: Hearing <urgent>"
     assert "https://app.example.test/dashboard/calendar?event_id=10" in html
-    assert "2026-07-18 12:00 UTC" in html and "UTC" in text
+    assert "18/07/2026, 12:00 PM UTC" in html and "UTC" in text
     assert "Hearing &lt;urgent&gt;" in html and "&lt;Client&gt;" in html and "Smith &amp; Co" in html
     assert "<urgent>" not in html
 

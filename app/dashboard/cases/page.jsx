@@ -7,6 +7,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useRef, useState } from "react";
 import { apiRequest } from "../../../lib/api";
 import { DiscardChangesDialog, useModalCloseGuard } from "../../../components/useModalCloseGuard";
+import ViloDateInput from "../../../components/ViloDateInput";
 
 const initialForm = {
   title: "",
@@ -334,7 +335,7 @@ function CasesPageContent() {
                 <div><label>Client *</label><select value={form.client_id} onChange={(e) => setForm({ ...form, client_id: e.target.value })} required><option value="">Select client</option>{clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
                 <div><label>Priority</label><select value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value })}><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select></div>
               </div>
-              <div><label>Expected Completion Date</label><input type="date" value={form.expected_completion_date} onChange={(e) => setForm({ ...form, expected_completion_date: e.target.value })} /></div>
+              <div><label>Expected Completion Date</label><ViloDateInput value={form.expected_completion_date} onChange={(value) => setForm({ ...form, expected_completion_date: value })} /></div>
               <div className="vilo-checkbox-grid">
                 <div className="case-assign-heading"><p>Assign Team Members</p></div>
                 <p className="case-assigned-empty">Team members can access this file without a separate client assignment.</p>
@@ -367,8 +368,8 @@ function CasesPageContent() {
           <label><span>Search</span><input type="search" value={searchDraft} onChange={(event) => changeFilter(setSearchDraft, event.target.value)} placeholder="Name, number, or client" /></label>
           <label><span>Assigned staff</span><select value={staffFilter} onChange={(event) => changeFilter(setStaffFilter, event.target.value)}><option value="">All staff</option>{team.map((member) => <option key={member.id} value={member.id}>{member.name}</option>)}</select></label>
           <label><span>Client</span><select value={clientFilter} onChange={(event) => changeFilter(setClientFilter, event.target.value)}><option value="">All clients</option>{clients.map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}</select></label>
-          <label><span>Created from</span><input type="date" value={createdFrom} onChange={(event) => changeFilter(setCreatedFrom, event.target.value)} /></label>
-          <label><span>Created to</span><input type="date" value={createdTo} onChange={(event) => changeFilter(setCreatedTo, event.target.value)} /></label>
+          <label><span>Created from</span><ViloDateInput value={createdFrom} onChange={(value) => changeFilter(setCreatedFrom, value)} /></label>
+          <label><span>Created to</span><ViloDateInput value={createdTo} onChange={(value) => changeFilter(setCreatedTo, value)} /></label>
           <button type="button" className="vilo-btn vilo-btn--secondary" onClick={clearFilters}>Clear filters</button>
         </div>
         <div className="case-tab-panel module-table-panel">
@@ -460,7 +461,7 @@ function CasesPageContent() {
                     <option value="high">high</option>
                   </select>
                 </div>
-                <div><label>Expected Completion Date</label><input type="date" value={editCase.expected_completion_date || ""} onChange={(e) => setEditCase((p) => ({ ...p, expected_completion_date: e.target.value }))} /></div>
+                <div><label>Expected Completion Date</label><ViloDateInput value={editCase.expected_completion_date || ""} onChange={(value) => setEditCase((p) => ({ ...p, expected_completion_date: value }))} /></div>
                 <div className="vilo-table-actions">
                   <button type="button" className="vilo-btn vilo-btn--secondary" onClick={editCloseGuard.requestClose} disabled={saving}>Cancel</button>
                   <button type="submit" className="vilo-btn vilo-btn--primary" disabled={saving}>{saving ? "Saving..." : "Save Changes"}</button>

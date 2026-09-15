@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { apiRequest } from "../../../lib/api";
+import { formatViloDateTime } from "../../../lib/dateFormat";
 import { clearAuth, getCachedUser, getToken, setCachedUser } from "../../../lib/auth";
 import { portalNav } from "./nav";
 
@@ -106,7 +107,7 @@ export default function PortalShell({ children }) {
                   <button key={item.id} type="button" className="portal-topbar__dropdown-item" onClick={() => markRead(item.id)}>
                     <strong>{item.title}</strong>
                     {item.body ? <span>{item.body}</span> : null}
-                    <small>{new Date(item.created_at).toLocaleString()}</small>
+                    <small>{formatViloDateTime(item.created_at)}</small>
                   </button>
                 ))}
               </div>

@@ -389,6 +389,19 @@ def test_admin_can_edit_protected_task_fields():
         cleanup(client)
 
 
+def test_partner_can_edit_protected_task_fields():
+    existing = task_obj(title="Original title")
+    db = TaskDBStub(scalar_values=[existing])
+    client = build_client("partner", db)
+    try:
+        res = client.patch("/api/v1/tasks/5", json={"title": "Partner revision"})
+        assert res.status_code == 200
+        assert res.json()["title"] == "Partner revision"
+        assert db.commits == 1
+    finally:
+        cleanup(client)
+
+
 def test_admin_can_delete_task():
     existing = task_obj(archived_at=None)
     db = TaskDBStub(scalar_values=[existing])
@@ -403,8 +416,8 @@ def test_admin_can_delete_task():
         cleanup(client)
 
 
-@pytest.mark.parametrize("role", ["partner", "lawyer", "paralegal"])
-def test_non_admin_cannot_edit_protected_task_fields(role):
+@pytest.mark.parametrize("role", ["lawyer", "paralegal"])
+def test_non_manager_cannot_edit_protected_task_fields(role):
     existing = task_obj(title="Original title")
     db = TaskDBStub(scalar_values=[existing])
     client = build_client(role, db)

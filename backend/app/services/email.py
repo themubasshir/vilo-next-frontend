@@ -152,7 +152,8 @@ def build_reminder_email(
     if scheduled_at is not None:
         if scheduled_at.tzinfo is None:
             scheduled_at = scheduled_at.replace(tzinfo=timezone.utc)
-        scheduled_text = scheduled_at.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+        scheduled_utc = scheduled_at.astimezone(timezone.utc)
+        scheduled_text = f"{scheduled_utc.strftime('%d/%m/%Y')}, {scheduled_utc.strftime('%I:%M %p').lstrip('0')} UTC"
     else:
         scheduled_text = "Not scheduled"
     absolute_link = urljoin(f"{settings.app_base_url.rstrip('/')}/", (link or "/dashboard").lstrip("/"))

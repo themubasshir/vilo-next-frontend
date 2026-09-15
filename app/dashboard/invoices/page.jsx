@@ -7,6 +7,8 @@ import { getCachedUser, setCachedUser } from "../../../lib/auth";
 import { apiDownload, apiRequest } from "../../../lib/api";
 import { invoiceErrorsByField, normalizeInvoicePayload } from "../../../lib/invoicePayload";
 import { DiscardChangesDialog, useModalCloseGuard } from "../../../components/useModalCloseGuard";
+import { formatViloDate } from "../../../lib/dateFormat";
+import ViloDateInput from "../../../components/ViloDateInput";
 
 const LINE_ITEM_TYPE_OPTIONS = [
   ["legal_fee", "Legal Fee"],
@@ -56,10 +58,7 @@ function formatMoney(value, currency = "JMD") {
 }
 
 function formatDate(value) {
-  if (!value) return "-";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  return formatViloDate(value);
 }
 
 function roleCanManagePayments(role) {
@@ -828,12 +827,12 @@ function InvoicesPageContent() {
                   <div className="vilo-form-row-two">
                     <div>
                       <label>Issue Date *</label>
-                      <input type="date" value={form.issue_date} onChange={(event) => setForm((current) => ({ ...current, issue_date: event.target.value }))} required />
+                      <ViloDateInput value={form.issue_date} onChange={(value) => setForm((current) => ({ ...current, issue_date: value }))} required />
                       {createFieldErrors.issue_date ? <p className="vilo-field-error">{createFieldErrors.issue_date}</p> : null}
                     </div>
                     <div>
                       <label>Due Date</label>
-                      <input type="date" value={form.due_date} onChange={(event) => setForm((current) => ({ ...current, due_date: event.target.value }))} />
+                      <ViloDateInput value={form.due_date} onChange={(value) => setForm((current) => ({ ...current, due_date: value }))} />
                       {createFieldErrors.due_date ? <p className="vilo-field-error">{createFieldErrors.due_date}</p> : null}
                     </div>
                   </div>

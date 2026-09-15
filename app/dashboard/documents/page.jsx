@@ -9,6 +9,7 @@ import ProtectedFilePreviewModal, { useProtectedFilePreview } from "../../../com
 import OnlyOfficeDocumentModal from "../../../components/OnlyOfficeDocumentModal";
 import { getDocumentViewerType } from "../../../lib/documentViewer";
 import { formatViloDate, formatViloDateTime } from "../../../lib/dateFormat";
+import ViloDateInput from "../../../components/ViloDateInput";
 
 const initialForm = {
   client_id: "",
@@ -636,8 +637,8 @@ function DocumentsPageContent() {
               <label><span>Uploaded by</span><select value={filterUploader} onChange={(event) => setFilterUploader(event.target.value)}><option value="">Anyone</option>{uploaders.map((row) => <option key={row.id} value={row.id}>{row.name}</option>)}</select></label>
               <label><span>Status</span><select value={filterVisibility} onChange={(event) => setFilterVisibility(event.target.value)}><option value="">Any status</option><option value="internal">Internal</option><option value="client_visible">Client visible</option></select></label>
               <label><span>File type</span><select value={filterType} onChange={(event) => setFilterType(event.target.value)}><option value="">All types</option><option value="pdf">PDF</option><option value="word">Word</option><option value="image">Image</option></select></label>
-              <label><span>Uploaded from</span><input type="date" value={filterFrom} onChange={(event) => setFilterFrom(event.target.value)} /></label>
-              <label><span>Uploaded to</span><input type="date" value={filterTo} onChange={(event) => setFilterTo(event.target.value)} /></label>
+              <label><span>Uploaded from</span><ViloDateInput value={filterFrom} onChange={setFilterFrom} /></label>
+              <label><span>Uploaded to</span><ViloDateInput value={filterTo} onChange={setFilterTo} /></label>
               <button type="button" className="vilo-btn vilo-btn--secondary vilo-btn--xs" onClick={() => { setDraftSearch(""); setSearchQuery(""); setActiveFolder("all"); setActiveTab("all"); setFilterCategory(""); setFilterCase(""); setFilterClient(""); setFilterUploader(""); setFilterVisibility(""); setFilterType(""); setFilterFrom(""); setFilterTo(""); setPage(1); const params = new URLSearchParams(searchParams.toString()); params.delete("document_id"); router.replace(params.toString() ? `${pathname}?${params.toString()}` : pathname); }}>Clear filters</button>
             </div>
 

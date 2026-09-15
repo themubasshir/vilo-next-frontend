@@ -5,6 +5,8 @@ import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { getCachedUser, setCachedUser } from "../../../lib/auth";
 import { apiDownload, apiRequest } from "../../../lib/api";
+import { formatViloDate, formatViloDateTime } from "../../../lib/dateFormat";
+import ViloDateInput from "../../../components/ViloDateInput";
 
 const TAB_OPTIONS = ["transactions", "client_ledgers", "matter_ledgers", "receipts"];
 const SUPPORTED_CURRENCIES = ["JMD", "USD"];
@@ -46,20 +48,7 @@ function formatMoney(value, currency = "JMD") {
 }
 
 function formatDate(value, includeTime = false) {
-  if (!value) return "-";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString("en-US", includeTime ? {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  } : {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+  return includeTime ? formatViloDateTime(value) : formatViloDate(value);
 }
 
 function today() {
@@ -553,10 +542,10 @@ function TrustPageInner() {
               </select>
             </Field>
             <Field label="Date From">
-              <input type="date" value={filters.date_from} onChange={(event) => updateFilters("date_from", event.target.value)} />
+              <ViloDateInput value={filters.date_from} onChange={(value) => updateFilters("date_from", value)} />
             </Field>
             <Field label="Date To">
-              <input type="date" value={filters.date_to} onChange={(event) => updateFilters("date_to", event.target.value)} />
+              <ViloDateInput value={filters.date_to} onChange={(value) => updateFilters("date_to", value)} />
             </Field>
             <label className="trust-toggle trust-toggle--filters">
               <input type="checkbox" checked={filters.include_reversed} onChange={(event) => updateFilters("include_reversed", event.target.checked)} />
@@ -773,7 +762,7 @@ function TrustPageInner() {
                 </select>
               </Field>
               <Field label="Date" required>
-                <input type="date" value={form.transaction_date} onChange={(event) => updateForm("transaction_date", event.target.value)} required />
+                <ViloDateInput value={form.transaction_date} onChange={(value) => updateForm("transaction_date", value)} required />
               </Field>
               <Field label="Payment Method">
                 <input value={form.payment_method} onChange={(event) => updateForm("payment_method", event.target.value)} placeholder="Wire, cheque, cash, card" />

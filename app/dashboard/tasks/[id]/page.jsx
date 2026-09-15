@@ -6,6 +6,7 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { apiRequest } from "../../../../lib/api";
 import { getCachedUser } from "../../../../lib/auth";
 import { formatViloDateTime } from "../../../../lib/dateFormat";
+import ViloDateInput from "../../../../components/ViloDateInput";
 
 const STATUS_OPTIONS = ["not_started", "in_progress", "waiting", "completed"];
 const PRIORITY_OPTIONS = ["low", "medium", "high", "urgent"];
@@ -72,7 +73,8 @@ export default function TaskDetailPage() {
   const [success, setSuccess] = useState("");
   const [editOpen, setEditOpen] = useState(searchParams.get("edit") === "1");
   const [currentUser, setCurrentUser] = useState(getCachedUser());
-  const canManageTask = currentUser?.role === "admin";
+  const canEditTask = currentUser?.role === "admin" || currentUser?.role === "partner";
+  const canDeleteTask = currentUser?.role === "admin";
 
   async function load() {
     setLoading(true);
@@ -110,9 +112,9 @@ export default function TaskDetailPage() {
 
   useEffect(() => {
     const shouldOpen = searchParams.get("edit") === "1";
-    setEditOpen(shouldOpen && canManageTask);
-    if (shouldOpen && canManageTask && task) setForm(buildInitialForm(task));
-  }, [canManageTask, searchParams, task]);
+    setEditOpen(shouldOpen && canEditTask);
+    if (shouldOpen && canEditTask && task) setForm(buildInitialForm(task));
+  }, [canEditTask, searchParams, task]);
 
   useEffect(() => {
     if (!editOpen) return;
@@ -238,7 +240,7 @@ export default function TaskDetailPage() {
           <p className="vilo-card-copy">Dedicated task detail for status changes, linked records, and editing.</p>
         </div>
         <div className="task-detail-page__actions">
-          {canManageTask ? <button type="button" className="vilo-btn vilo-btn--secondary" onClick={() => updateSearchParam("edit", "1")}>Edit Task</button> : null}
+          {canEditTask ? <button type="button" className="vilo-btn vilo-btn--secondary" onClick={() => updateSearchParam("edit", "1")}>Edit Task</button> : null}
           {!isCompleted(task) ? <button type="button" className="vilo-btn vilo-btn--primary" onClick={completeTask} disabled={saving}>Mark Complete</button> : null}
         </div>
       </div>
@@ -265,7 +267,7 @@ export default function TaskDetailPage() {
                   {STATUS_OPTIONS.map((option) => <option key={option} value={option}>{normalizeLabel(option)}</option>)}
                 </select>
               </label>
-              {canManageTask ? <label>
+              {canEditTask ? <label>
                 <span>Priority</span>
                 <select value={task.priority} onChange={(event) => handlePriorityChange(event.target.value)} disabled={saving}>
                   {PRIORITY_OPTIONS.map((option) => <option key={option} value={option}>{normalizeLabel(option)}</option>)}
@@ -296,12 +298,12 @@ export default function TaskDetailPage() {
             <Link className="vilo-btn vilo-btn--secondary" href="/dashboard/tasks">Back to Task List</Link>
             {task.client_id ? <Link className="vilo-btn vilo-btn--secondary" href={`/dashboard/clients/${task.client_id}`}>Open Client</Link> : null}
             {task.case_id ? <Link className="vilo-btn vilo-btn--secondary" href={`/dashboard/cases/${task.case_id}`}>Open Case</Link> : null}
-            {canManageTask ? <button type="button" className="vilo-btn vilo-btn--danger" onClick={deleteTask} disabled={saving}>Delete Task</button> : null}
+            {canDeleteTask ? <button type="button" className="vilo-btn vilo-btn--danger" onClick={deleteTask} disabled={saving}>Delete Task</button> : null}
           </div>
         </article>
       </div>
 
-      {editOpen && canManageTask ? (
+      {editOpen && canEditTask ? (
         <div className="vilo-modal-overlay" onClick={() => updateSearchParam("edit", null)}>
           <div className="vilo-modal task-editor-modal" onClick={(event) => event.stopPropagation()}>
             <div className="vilo-modal__header">
@@ -377,16 +379,16 @@ export default function TaskDetailPage() {
                 </div>
 
                 <div className="vilo-form-row-two">
-                  <input
-                    type="datetime-local"
+                  <ViloDateInput
+                    includeTime
                     value={form.due_date}
-                    onChange={(event) => setForm((current) => ({ ...current, due_date: event.target.value }))}
+                    onChange={(value) => setForm((current) => ({ ...current, due_date: value }))}
                     required
                   />
-                  <input
-                    type="datetime-local"
+                  <ViloDateInput
+                    includeTime
                     value={form.reminder_at}
-                    onChange={(event) => setForm((current) => ({ ...current, reminder_at: event.target.value }))}
+                    onChange={(value) => setForm((current) => ({ ...current, reminder_at: value }))}
                   />
                 </div>
 

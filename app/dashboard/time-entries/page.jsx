@@ -4,6 +4,8 @@ import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { getCachedUser, setCachedUser } from "../../../lib/auth";
 import { apiRequest } from "../../../lib/api";
+import { formatViloDateTime } from "../../../lib/dateFormat";
+import ViloDateInput from "../../../components/ViloDateInput";
 
 function nowLocalValue(offsetHours = 0) {
   const date = new Date();
@@ -27,15 +29,7 @@ function createInitialForm() {
 }
 
 function formatDateTime(value) {
-  if (!value) return "-";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
+  return formatViloDateTime(value);
 }
 
 function formatMoney(value, currency = "USD") {
@@ -556,11 +550,11 @@ function TimeEntriesPageContent() {
               <div className="vilo-form-row-two">
                 <div>
                   <label>Start Time</label>
-                  <input type="datetime-local" value={form.start_time} disabled={modalMode === "view"} onChange={(event) => setForm((current) => ({ ...current, start_time: event.target.value }))} />
+                  <ViloDateInput includeTime value={form.start_time} disabled={modalMode === "view"} onChange={(value) => setForm((current) => ({ ...current, start_time: value }))} />
                 </div>
                 <div>
                   <label>End Time</label>
-                  <input type="datetime-local" value={form.end_time} disabled={modalMode === "view"} onChange={(event) => setForm((current) => ({ ...current, end_time: event.target.value }))} />
+                  <ViloDateInput includeTime value={form.end_time} disabled={modalMode === "view"} onChange={(value) => setForm((current) => ({ ...current, end_time: value }))} />
                 </div>
               </div>
 

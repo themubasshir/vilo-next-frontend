@@ -36,7 +36,7 @@ def _utc(value: datetime | None) -> datetime | None:
 
 def _display_time(value: datetime | None) -> str:
     converted = _utc(value)
-    return converted.strftime("%Y-%m-%d %H:%M UTC") if converted else "unscheduled"
+    return f"{converted.strftime('%d/%m/%Y')}, {converted.strftime('%I:%M %p').lstrip('0')} UTC" if converted else "unscheduled"
 
 
 def _event_link(event: CalendarEvent) -> str:

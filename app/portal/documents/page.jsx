@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { apiRequest } from "../../../lib/api";
+import { formatViloDate } from "../../../lib/dateFormat";
 
 export default function PortalDocumentsPage() {
   const [rows, setRows] = useState({ items: [], total: 0, page: 1, page_size: 10 });
@@ -37,7 +38,7 @@ export default function PortalDocumentsPage() {
                   <tr key={d.id}>
                     <td>{d.title}</td>
                     <td>{d.category || "-"}</td>
-                    <td>{new Date(d.created_at).toLocaleDateString()}</td>
+                    <td>{formatViloDate(d.created_at)}</td>
                     <td><a href={`${process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000"}/api/v1/portal/documents/${d.id}/download`} target="_blank">Download</a></td>
                   </tr>
                 ))}

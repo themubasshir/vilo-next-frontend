@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { apiRequest } from "../../../../lib/api";
+import { formatViloDateTime } from "../../../../lib/dateFormat";
 
 function money(value) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(Number(value || 0));
@@ -56,7 +57,7 @@ export default function PortalCaseDetailPage() {
           <article className="dashboard-card vilo-table-card">
             <div className="dashboard-card__header"><h2>Timeline</h2></div>
             {!data.timeline.length ? <p className="vilo-state">No timeline entries.</p> : (
-              <div className="vilo-table-wrap"><table className="team-table"><thead><tr><th>Event</th><th>Date</th></tr></thead><tbody>{data.timeline.map((t) => <tr key={t.id}><td>{t.title}</td><td>{new Date(t.created_at).toLocaleString()}</td></tr>)}</tbody></table></div>
+              <div className="vilo-table-wrap"><table className="team-table"><thead><tr><th>Event</th><th>Date</th></tr></thead><tbody>{data.timeline.map((t) => <tr key={t.id}><td>{t.title}</td><td>{formatViloDateTime(t.created_at)}</td></tr>)}</tbody></table></div>
             )}
           </article>
 

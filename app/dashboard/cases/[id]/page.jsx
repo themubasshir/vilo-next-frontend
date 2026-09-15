@@ -10,6 +10,7 @@ import OnlyOfficeDocumentModal from "../../../../components/OnlyOfficeDocumentMo
 import ProtectedFilePreviewModal, { useProtectedFilePreview } from "../../../../components/ProtectedFilePreviewModal";
 import { getDocumentViewerType } from "../../../../lib/documentViewer";
 import { formatViloDate, formatViloDateTime } from "../../../../lib/dateFormat";
+import ViloDateInput from "../../../../components/ViloDateInput";
 
 const TABS = ["timeline", "notes", "tasks", "documents", "team"];
 const EVENT_TYPES = ["milestone", "hearing", "filing", "call", "meeting", "note"];
@@ -724,8 +725,8 @@ export default function CaseDetailPage() {
               <option value="false">Not completed</option>
             </select>
             <div className="vilo-form-row-two">
-              <input type="date" value={pendingFilters.date_from} onChange={(e) => setPendingFilters((p) => ({ ...p, date_from: e.target.value }))} />
-              <input type="date" value={pendingFilters.date_to} onChange={(e) => setPendingFilters((p) => ({ ...p, date_to: e.target.value }))} />
+              <ViloDateInput value={pendingFilters.date_from} onChange={(value) => setPendingFilters((p) => ({ ...p, date_from: value }))} />
+              <ViloDateInput value={pendingFilters.date_to} onChange={(value) => setPendingFilters((p) => ({ ...p, date_to: value }))} />
             </div>
             <div className="vilo-table-actions">
               <button className="vilo-btn vilo-btn--primary" type="button" onClick={async () => { setFilters(pendingFilters); setModalType(""); await loadTimeline(search, pendingFilters); }}>Apply</button>
@@ -742,7 +743,7 @@ export default function CaseDetailPage() {
             <select value={eventForm.event_type} onChange={(e) => setEventForm((p) => ({ ...p, event_type: e.target.value }))}>
               {EVENT_TYPES.map((x) => <option key={x} value={x}>{x}</option>)}
             </select>
-            <input type="date" value={eventForm.event_date} onChange={(e) => setEventForm((p) => ({ ...p, event_date: e.target.value }))} />
+            <ViloDateInput value={eventForm.event_date} onChange={(value) => setEventForm((p) => ({ ...p, event_date: value }))} />
             <select value={eventForm.status} onChange={(e) => setEventForm((p) => ({ ...p, status: e.target.value }))}>
               {STATUS_TYPES.map((x) => <option key={x} value={x}>{x}</option>)}
             </select>
@@ -773,7 +774,7 @@ export default function CaseDetailPage() {
             <select value={eventForm.event_type} onChange={(e) => setEventForm((p) => ({ ...p, event_type: e.target.value }))}>
               {EVENT_TYPES.map((x) => <option key={x} value={x}>{x}</option>)}
             </select>
-            <input type="date" value={eventForm.event_date} onChange={(e) => setEventForm((p) => ({ ...p, event_date: e.target.value }))} />
+            <ViloDateInput value={eventForm.event_date} onChange={(value) => setEventForm((p) => ({ ...p, event_date: value }))} />
             <select value={eventForm.status} onChange={(e) => setEventForm((p) => ({ ...p, status: e.target.value }))}>
               {STATUS_TYPES.map((x) => <option key={x} value={x}>{x}</option>)}
             </select>
@@ -837,7 +838,7 @@ export default function CaseDetailPage() {
               </select>
             </div>
             <div className="vilo-form-row-two">
-              <input type="date" value={taskForm.due_date} onChange={(e) => setTaskForm((p) => ({ ...p, due_date: e.target.value }))} />
+              <ViloDateInput value={taskForm.due_date} onChange={(value) => setTaskForm((p) => ({ ...p, due_date: value }))} />
               <select value={taskForm.assigned_to} onChange={(e) => setTaskForm((p) => ({ ...p, assigned_to: e.target.value }))}>
                 <option value="">Unassigned</option>
                 {team.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}

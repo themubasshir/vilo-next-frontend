@@ -8,6 +8,7 @@ import { apiRequest } from "../../../lib/api";
 import { getCachedUser } from "../../../lib/auth";
 import { formatViloDate } from "../../../lib/dateFormat";
 import { DiscardChangesDialog, useModalCloseGuard } from "../../../components/useModalCloseGuard";
+import ViloDateInput from "../../../components/ViloDateInput";
 
 const STATUS_OPTIONS = ["not_started", "in_progress", "waiting", "completed"];
 const PRIORITY_OPTIONS = ["low", "medium", "high", "urgent"];
@@ -190,7 +191,8 @@ function TasksPageContent() {
   const [activeDropdown, setActiveDropdown] = useState(null);
   const [statusSavingId, setStatusSavingId] = useState(null);
   const [currentUser, setCurrentUser] = useState(getCachedUser());
-  const canManageTask = currentUser?.role === "admin";
+  const canEditTask = currentUser?.role === "admin" || currentUser?.role === "partner";
+  const canDeleteTask = currentUser?.role === "admin";
   const [activeTab, setActiveTab] = useState(tabFromLegacyFilter(searchParams.get("filter")));
   const [taskSearch, setTaskSearch] = useState("");
   const [assignedStaff, setAssignedStaff] = useState("");
@@ -559,9 +561,9 @@ function TasksPageContent() {
             <>
               <button type="button" onClick={() => { setActiveDropdown(null); router.push(detailHref); }}>View Details</button>
               {task.case_id ? <Link href={`/dashboard/cases/${task.case_id}`} onClick={() => setActiveDropdown(null)}>View Case</Link> : <button type="button" disabled>View Case</button>}
-              {canManageTask ? <button type="button" onClick={() => { setActiveDropdown(null); router.push(editHref); }}>Edit Task</button> : null}
+              {canEditTask ? <button type="button" onClick={() => { setActiveDropdown(null); router.push(editHref); }}>Edit Task</button> : null}
               {!isCompleted(task) ? <button type="button" onClick={() => completeTask(task.id)}>Mark as Complete</button> : null}
-              {canManageTask ? <button type="button" className="is-danger" onClick={() => deleteTask(task.id)}>Delete Task</button> : null}
+              {canDeleteTask ? <button type="button" className="is-danger" onClick={() => deleteTask(task.id)}>Delete Task</button> : null}
             </>
           )}
       </div>,
@@ -605,8 +607,8 @@ function TasksPageContent() {
           <label><span>Case / File</span><select value={caseFilter} onChange={(event) => changeCaseFilter(event.target.value)}><option value="">All Cases / Files</option>{filterCases.map((caseRow) => <option key={caseRow.id} value={caseRow.id}>{caseRow.title}</option>)}</select></label>
           <label><span>Status</span><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="">All Statuses</option>{STATUS_OPTIONS.map((option) => <option key={option} value={option}>{normalizeLabel(option)}</option>)}</select></label>
           <label><span>Priority</span><select value={priorityFilter} onChange={(event) => setPriorityFilter(event.target.value)}><option value="">All Priorities</option>{PRIORITY_OPTIONS.map((option) => <option key={option} value={option}>{normalizeLabel(option)}</option>)}</select></label>
-          <label><span>Due From</span><input type="date" value={dueFrom} onChange={(event) => setDueFrom(event.target.value)} /></label>
-          <label><span>Due To</span><input type="date" value={dueTo} onChange={(event) => setDueTo(event.target.value)} /></label>
+          <label><span>Due From</span><ViloDateInput value={dueFrom} onChange={setDueFrom} /></label>
+          <label><span>Due To</span><ViloDateInput value={dueTo} onChange={setDueTo} /></label>
           <button type="button" className="vilo-btn vilo-btn--secondary" onClick={clearTaskFilters}>Clear Filters</button>
         </div>
 
@@ -822,10 +824,10 @@ function TaskEditorModal({
             </div>
 
             <div className="vilo-form-row-two">
-              <input
-                type="datetime-local"
+              <ViloDateInput
+                includeTime
                 value={form.due_date}
-                onChange={(event) => setForm((current) => ({ ...current, due_date: event.target.value }))}
+                onChange={(value) => setForm((current) => ({ ...current, due_date: value }))}
                 required
               />
               <select
@@ -837,10 +839,10 @@ function TaskEditorModal({
             </div>
 
             {form.reminder_choice === "custom" ? (
-              <input
-                type="datetime-local"
+              <ViloDateInput
+                includeTime
                 value={form.custom_reminder_at}
-                onChange={(event) => setForm((current) => ({ ...current, custom_reminder_at: event.target.value }))}
+                onChange={(value) => setForm((current) => ({ ...current, custom_reminder_at: value }))}
               />
             ) : null}
 

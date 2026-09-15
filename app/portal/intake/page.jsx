@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { apiRequest } from "../../../lib/api";
+import { formatViloDateTime } from "../../../lib/dateFormat";
 
 const initialForm = {
   full_name: "",
@@ -91,7 +92,7 @@ export default function PortalIntakePage() {
                   <tr key={item.id}>
                     <td>{item.full_name}</td>
                     <td>{item.status}</td>
-                    <td>{item.submitted_at ? new Date(item.submitted_at).toLocaleString() : "-"}</td>
+                    <td>{formatViloDateTime(item.submitted_at)}</td>
                     <td>{item.status === "draft" ? <button onClick={() => submitIntake(item.id)}>Submit</button> : "Read-only"}</td>
                   </tr>
                 ))}

@@ -6,6 +6,7 @@ import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { apiRequest } from "../../lib/api";
+import { formatViloDateTime } from "../../lib/dateFormat";
 import { motionEase, createHoverLift, createItemVariants } from "../motion";
 
 const billingChildren = [
@@ -337,9 +338,7 @@ function prettyType(value) {
 
 function formatShortTimestamp(value) {
   if (!value) return "Just now";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "Just now";
-  return date.toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+  return formatViloDateTime(value, "Just now");
 }
 
 function IconBase({ children, className = "" }) {
