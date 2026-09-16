@@ -375,7 +375,8 @@ function MessagesPageContent() {
 
   useEffect(() => {
     if (localRoute.current === searchParams.toString()) return;
-    setFilter(searchParams.get("conversation") ? "all" : searchParams.get("filter") === "unread" ? "unread" : "all");
+    const routeFilter = searchParams.get("filter");
+    setFilter(["unread", "internal", "client", "group"].includes(routeFilter) ? routeFilter : "all");
   }, [searchParams]);
 
   useEffect(() => {
@@ -479,6 +480,11 @@ function MessagesPageContent() {
     selectedRef.current = conv;
     setSelected(conv);
     updateRoute({ conversation: conv.id, create: null });
+  }
+
+  function chooseFilter(nextFilter) {
+    setFilter(nextFilter);
+    updateRoute({ filter: nextFilter === "all" ? null : nextFilter });
   }
 
   function openCreateModal() {
@@ -652,7 +658,7 @@ function MessagesPageContent() {
 
             <div className="messages-filters">
               {["all", "unread", "internal", "client", "group"].map((key) => (
-                <button key={key} type="button" className={filter === key ? "case-tab-btn is-active" : "case-tab-btn"} onClick={() => setFilter(key)}>
+                <button key={key} type="button" className={filter === key ? "case-tab-btn is-active" : "case-tab-btn"} onClick={() => chooseFilter(key)}>
                   {key[0].toUpperCase() + key.slice(1)}
                 </button>
               ))}

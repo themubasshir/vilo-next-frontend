@@ -7,6 +7,7 @@ from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 from typing import AsyncIterator
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app.api import deps as deps_module
@@ -136,6 +137,36 @@ def test_upload_client_id_document_success_for_staff(monkeypatch):
             assert body["category"] == "client_id"
             assert body["file_name"] == "id.pdf"
             assert body["client_id_type"] == "other"
+        finally:
+            cleanup(client)
+
+
+@pytest.mark.parametrize(
+    ("file_name", "content_type", "content"),
+    [
+        ("identity.pdf", "application/pdf", b"%PDF-1.4 identity"),
+        ("identity.doc", "application/msword", b"DOC identity"),
+        ("identity.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", b"DOCX identity"),
+        ("identity.jpg", "image/jpeg", b"JPEG identity"),
+        ("identity.jpeg", "image/jpeg", b"JPEG identity"),
+        ("identity.png", "image/png", b"PNG identity"),
+    ],
+)
+def test_upload_accepts_every_supported_client_id_extension(monkeypatch, file_name, content_type, content):
+    client_row = _client_obj()
+    db = ClientDocsDBStub(scalar_values=[client_row])
+    client = build_client("partner", db)
+    with TemporaryDirectory() as tmpdir:
+        monkeypatch.setattr(clients_module, "STORAGE_ROOT", Path(tmpdir))
+        try:
+            response = client.post(
+                "/api/v1/clients/7/id-documents",
+                data={"id_type": "passport"},
+                files={"file": (file_name, content, content_type)},
+            )
+            assert response.status_code == 200, response.text
+            assert response.json()["file_name"] == file_name
+            assert response.json()["client_id_type"] == "passport"
         finally:
             cleanup(client)
 
@@ -304,6 +335,23 @@ def test_upload_rejects_client_id_over_size_limit(monkeypatch):
             )
             assert res.status_code == 400
             assert res.json()["detail"] == "File exceeds upload size limit"
+        finally:
+            cleanup(client)
+
+
+def test_upload_rejects_empty_client_id_file(monkeypatch):
+    client_row = _client_obj()
+    db = ClientDocsDBStub(scalar_values=[client_row])
+    client = build_client("partner", db)
+    with TemporaryDirectory() as tmpdir:
+        monkeypatch.setattr(clients_module, "STORAGE_ROOT", Path(tmpdir))
+        try:
+            response = client.post(
+                "/api/v1/clients/7/id-documents",
+                files={"file": ("empty.pdf", b"", "application/pdf")},
+            )
+            assert response.status_code == 400
+            assert response.json()["detail"] == "Empty file"
         finally:
             cleanup(client)
 

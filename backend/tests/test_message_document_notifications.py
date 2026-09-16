@@ -1,5 +1,5 @@
 """Persisted API tests for Batch 3 unread state, alerts, and File notifications."""
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pytest
 import pytest_asyncio
@@ -91,6 +91,73 @@ async def test_unread_sender_deleted_mark_read_dashboard_and_metadata(messaging)
     assert (await client.get(f'/api/v1/conversations/{cid}')).json()['unread_count'] == 0
     async with sessions() as db:
         assert await unread_messages_count(db, organization_id=1, user_id=3) == 0
+
+
+@pytest.mark.asyncio
+async def test_read_boundary_is_monotonic_future_safe_and_user_specific(messaging):
+    client, sessions, actor = messaging
+    response = await client.post('/api/v1/conversations', json={
+        'title': 'Three participants',
+        'conversation_type': 'group',
+        'participant_ids': [3, 4],
+    })
+    assert response.status_code == 200, response.text
+    cid = response.json()['id']
+    first = (await client.post(f'/api/v1/conversations/{cid}/messages', json={'body': 'First'})).json()
+
+    assert (await client.get(f'/api/v1/conversations/{cid}')).json()['unread_count'] == 0
+    actor['id'] = 3
+    assert (await client.get(f'/api/v1/conversations/{cid}')).json()['unread_count'] == 1
+    assert (await client.post(
+        f'/api/v1/conversations/{cid}/mark-read',
+        params={'read_through': first['created_at']},
+    )).status_code == 200
+    assert (await client.get(f'/api/v1/conversations/{cid}')).json()['unread_count'] == 0
+
+    async with sessions() as db:
+        bob_read_at = (await db.scalar(select(ConversationParticipant).where(
+            ConversationParticipant.conversation_id == cid,
+            ConversationParticipant.user_id == 3,
+        ))).last_read_at
+        carol = await db.scalar(select(ConversationParticipant).where(
+            ConversationParticipant.conversation_id == cid,
+            ConversationParticipant.user_id == 4,
+        ))
+        assert carol.last_read_at is None
+
+    actor['id'] = 1
+    second = (await client.post(f'/api/v1/conversations/{cid}/messages', json={'body': 'Second'})).json()
+    actor['id'] = 3
+    assert (await client.get(f'/api/v1/conversations/{cid}')).json()['unread_count'] == 1
+    assert (await client.post(
+        f'/api/v1/conversations/{cid}/mark-read',
+        params={'read_through': first['created_at']},
+    )).status_code == 200
+    assert (await client.get(f'/api/v1/conversations/{cid}')).json()['unread_count'] == 1
+    async with sessions() as db:
+        assert (await db.scalar(select(ConversationParticipant).where(
+            ConversationParticipant.conversation_id == cid,
+            ConversationParticipant.user_id == 3,
+        ))).last_read_at == bob_read_at
+
+    future = datetime.now(timezone.utc) + timedelta(days=1)
+    assert (await client.post(
+        f'/api/v1/conversations/{cid}/mark-read',
+        params={'read_through': future.isoformat()},
+    )).status_code == 200
+    actor['id'] = 1
+    third = (await client.post(f'/api/v1/conversations/{cid}/messages', json={'body': 'Third'})).json()
+    assert third['created_at'] > second['created_at']
+    actor['id'] = 3
+    assert (await client.get(f'/api/v1/conversations/{cid}')).json()['unread_count'] == 1
+    actor['id'] = 4
+    assert (await client.get(f'/api/v1/conversations/{cid}')).json()['unread_count'] == 3
+    async with sessions() as db:
+        carol = await db.scalar(select(ConversationParticipant).where(
+            ConversationParticipant.conversation_id == cid,
+            ConversationParticipant.user_id == 4,
+        ))
+        assert carol.last_read_at is None
 
 
 @pytest.mark.asyncio

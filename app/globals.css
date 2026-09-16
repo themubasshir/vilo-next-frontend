@@ -5677,6 +5677,13 @@ button {
   font-weight: 600;
 }
 
+.client-upload-block__help {
+  display: block;
+  margin-bottom: 0.65rem;
+  color: #7a768f;
+  font-size: 0.85rem;
+}
+
 .client-upload-dropzone {
   border: 1px dashed #d7d3e8;
   border-radius: 10px;

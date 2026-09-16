@@ -281,7 +281,8 @@ export default function ClientIntakeModal({
           </div>
 
           {showIdUpload ? <div className="client-upload-block">
-            <p>Upload ID</p>
+            <p>Upload IDs</p>
+            <span className="client-upload-block__help">Upload one or more identification documents.</span>
             {draftAttachment && !attachmentRemoved ? (
               <div className="client-draft-attachment">
                 <div>
@@ -309,7 +310,7 @@ export default function ClientIntakeModal({
               onDrop={handleDrop}
             >
               <strong>Drag &amp; drop ID files here or <button type="button" className="client-upload-browse" onClick={() => fileInputRef.current?.click()}>Browse</button></strong>
-              <span>PDF, DOC/DOCX, JPG, PNG. Max file size 10MB each.</span>
+              <span>PDF, DOC/DOCX, JPG, PNG — max 10MB each.</span>
               <input
                 ref={fileInputRef}
                 type="file"
@@ -321,7 +322,7 @@ export default function ClientIntakeModal({
               />
             </div>
             {selectedIds.length ? <div className="client-selected-ids" aria-live="polite">
-              <p className="client-selected-ids__count">{selectedIds.length} ID {selectedIds.length === 1 ? "file" : "files"} selected</p>
+              <p className="client-selected-ids__count">{selectedIds.length} ID {selectedIds.length === 1 ? "file" : "files"} selected for upload</p>
               <div className="client-selected-ids__list">
                 {selectedIds.map((entry) => <div className="client-selected-id" key={entry.key}>
                   <div className="client-selected-id__type">
