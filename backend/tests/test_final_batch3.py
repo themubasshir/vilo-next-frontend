@@ -25,6 +25,28 @@ def test_messages_only_acknowledge_visible_selected_fetched_thread():
     assert 'if (document.visibilityState === "visible") refresh(true)' in source
 
 
+def test_messages_loads_neutral_without_auto_selecting_first_summary():
+    source = (REPO_ROOT / "app/dashboard/messages/page.jsx").read_text()
+    assert 'summaries[0]' not in source
+    assert 'if (requested) return summaries.find((row) => Number(row.id) === requested) || null;' in source
+    assert '<span>Select a conversation to view messages.</span>' in source
+    assert 'onClick={() => openConversation(conv)}' in source
+
+
+def test_case_linking_and_attachment_actions_remain_semantically_separate():
+    source = (REPO_ROOT / "app/dashboard/messages/page.jsx").read_text()
+    assert '<span>Tag Message to Case</span>' in source
+    assert 'body: JSON.stringify({ case_id: caseId })' in source
+    assert 'casePickerMode === "conversation" ? "Link Selected Case" : "Tag Selected Case"' in source
+    assert 'event.stopPropagation(); openPreview' in source
+    assert 'event.stopPropagation(); downloadAttachment' in source
+
+    styles = (REPO_ROOT / "app/globals.css").read_text()
+    assert 'grid-template-columns: auto minmax(0, 1fr) auto;' in styles
+    assert '.message-attachment__meta {' in styles and 'min-width: 0;' in styles
+    assert '.message-attachment__actions {' in styles and 'grid-column: 2;' in styles
+
+
 def test_client_intake_multiple_id_selection_is_explicit_and_per_file():
     source = (REPO_ROOT / "components/dashboard/ClientIntakeModal.jsx").read_text()
     assert "<p>Upload IDs</p>" in source

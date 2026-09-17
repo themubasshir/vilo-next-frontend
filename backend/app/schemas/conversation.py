@@ -24,6 +24,7 @@ class CaseSearchResult(BaseModel):
     id: int
     title: str
     display_number: str | None = None
+    client_name: str | None = None
 
 
 class MessageCreate(BaseModel):

@@ -1764,7 +1764,8 @@ button {
   border-radius: 14px;
   background: #fff;
   padding: 0.8rem 0.9rem;
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   justify-content: space-between;
   gap: 0.8rem;
@@ -1774,9 +1775,67 @@ button {
 
 .messages-case-search-item:hover,
 .messages-case-search-item:focus-visible {
+  background: #f8f7ff;
   border-color: rgba(93, 70, 246, 0.28);
   box-shadow: 0 10px 18px rgba(93, 70, 246, 0.08);
   outline: none;
+}
+
+.messages-case-search-item.is-selected {
+  border-color: rgba(93, 70, 246, 0.55);
+  background: #efedff;
+  box-shadow: 0 0 0 2px rgba(93, 70, 246, 0.08);
+}
+
+.messages-case-search-item__copy {
+  display: grid;
+  min-width: 0;
+  gap: 0.16rem;
+}
+
+.messages-case-search-item__copy strong,
+.messages-case-search-item__copy span,
+.messages-case-search-item__copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.messages-case-search-item__copy small {
+  color: #625d76;
+  font-size: 0.78rem;
+}
+
+.messages-case-search-item__check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: 999px;
+  color: #5546dc;
+  font-weight: 750;
+}
+
+.messages-case-picker-modal {
+  width: min(560px, calc(100vw - 2rem));
+}
+
+.messages-case-picker-modal .vilo-modal__header p {
+  margin: 0.25rem 0 0;
+  color: #777288;
+  font-size: 0.82rem;
+}
+
+.messages-case-picker-modal__footer,
+.messages-case-picker-modal__footer > div {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.messages-case-picker-modal__footer {
+  justify-content: space-between;
 }
 
 .messages-case-search-item strong {
@@ -10271,9 +10330,13 @@ button {
 
 .message-attachment__actions,
 .messages-shared-file__actions {
-  display: grid;
-  justify-items: end;
-  gap: 0.16rem;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.35rem;
+  min-width: max-content;
+  position: relative;
+  z-index: 1;
 }
 
 .message-attachment__actions button,
@@ -10281,11 +10344,21 @@ button {
   border: 0;
   background: transparent;
   color: inherit;
-  padding: 0.08rem;
+  min-height: 2rem;
+  padding: 0.3rem 0.4rem;
   font-size: 0.67rem;
   font-weight: 650;
   text-decoration: underline;
   text-underline-offset: 2px;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.messages-related-case__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
 }
 
 .messages-thread__composer {
@@ -10725,6 +10798,16 @@ button {
     grid-column: 2;
     display: flex;
     justify-content: flex-start;
+  }
+
+  .messages-case-picker-modal__footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .messages-case-picker-modal__footer > div {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
   }
 
   .messages-thread__composer {

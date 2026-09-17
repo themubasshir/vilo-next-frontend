@@ -14,6 +14,7 @@ from app.models.client import Client
 from app.models.conversation import Conversation, ConversationParticipant, Message
 from app.models.message_attachment import MessageAttachment
 from app.models.message_case_reference import MessageCaseReference
+from app.models.notification import Notification
 from app.models.enums import UserRole
 from app.models.user import User
 from app.schemas.conversation import (
@@ -288,28 +289,32 @@ async def get_conversation(conversation_id: int, db: AsyncSession = Depends(get_
 async def update_conversation(conversation_id: int, payload: ConversationUpdate, db: AsyncSession = Depends(get_db), current_user: User = Depends(role_guard(ALLOWED_STAFF))):
     await require_participant(db, current_user.organization_id, conversation_id, current_user.id)
     conv = await get_conversation_or_404(db, current_user.organization_id, conversation_id)
-    if payload.title is not None:
+    fields_set = payload.model_fields_set
+    if "title" in fields_set and payload.title is not None:
         conv.title = payload.title
-    if payload.case_id is not None:
-        linked_case = await accessible_case_for_user(db, current_user.organization_id, payload.case_id, current_user)
-        if not linked_case:
-            raise HTTPException(status_code=400, detail="Case must belong to your organization")
-        if conv.conversation_type == "client":
-            client_parts = (
-                await db.scalars(
-                    select(ConversationParticipant).where(
-                        ConversationParticipant.organization_id == current_user.organization_id,
-                        ConversationParticipant.conversation_id == conv.id,
-                        ConversationParticipant.role == "client",
+    if "case_id" in fields_set:
+        if payload.case_id is None:
+            conv.case_id = None
+        else:
+            linked_case = await accessible_case_for_user(db, current_user.organization_id, payload.case_id, current_user)
+            if not linked_case:
+                raise HTTPException(status_code=400, detail="Case must belong to your organization")
+            if conv.conversation_type == "client":
+                client_parts = (
+                    await db.scalars(
+                        select(ConversationParticipant).where(
+                            ConversationParticipant.organization_id == current_user.organization_id,
+                            ConversationParticipant.conversation_id == conv.id,
+                            ConversationParticipant.role == "client",
+                        )
                     )
-                )
-            ).all()
-            if client_parts:
-                client_users = [p.user_id for p in client_parts]
-                clients = (await db.scalars(select(Client).where(Client.organization_id == current_user.organization_id, Client.user_id.in_(client_users)))).all()
-                if any(c.id != linked_case.client_id for c in clients):
-                    raise HTTPException(status_code=400, detail="Client participant does not match linked case client")
-        conv.case_id = payload.case_id
+                ).all()
+                if client_parts:
+                    client_users = [p.user_id for p in client_parts]
+                    clients = (await db.scalars(select(Client).where(Client.organization_id == current_user.organization_id, Client.user_id.in_(client_users)))).all()
+                    if any(c.id != linked_case.client_id for c in clients):
+                        raise HTTPException(status_code=400, detail="Client participant does not match linked case client")
+            conv.case_id = payload.case_id
     conv.updated_at = datetime.now(timezone.utc)
     await db.commit()
     return await conversation_summary(db, conv, current_user.id)
@@ -593,6 +598,21 @@ async def mark_conversation_read(conversation_id: int, read_through: datetime | 
     if previous and previous.tzinfo is None:
         previous = previous.replace(tzinfo=timezone.utc)
     part.last_read_at = max(previous, cutoff) if previous else cutoff
+    read_message_ids = set((await db.scalars(select(Message.id).where(
+        Message.organization_id == current_user.organization_id,
+        Message.conversation_id == conversation_id,
+        Message.created_at <= cutoff,
+    ))).all())
+    unread_message_notifications = (await db.scalars(select(Notification).where(
+        Notification.organization_id == current_user.organization_id,
+        Notification.user_id == current_user.id,
+        Notification.type == "message_received",
+        Notification.is_read.is_(False),
+    ))).all()
+    for notification in unread_message_notifications:
+        metadata = notification.metadata_json or {}
+        if metadata.get("conversation_id") == conversation_id and metadata.get("message_id") in read_message_ids:
+            notification.is_read = True
     await db.commit()
     return {"ok": True}
 
@@ -608,7 +628,18 @@ async def case_search(
             select(Case).where(Case.organization_id == current_user.organization_id).order_by(Case.updated_at.desc())
         )
     ).all()
+    client_ids = {row.client_id for row in rows if row.client_id is not None}
+    clients = (await db.scalars(select(Client).where(
+        Client.organization_id == current_user.organization_id,
+        Client.id.in_(client_ids),
+    ))).all() if client_ids else []
+    client_names = {client.id: client.name for client in clients}
     text = q.strip().lower()
     if text:
-        rows = [row for row in rows if text in f"{row.title} {case_number(row)}".lower()]
-    return [CaseSearchResult(id=row.id, title=row.title, display_number=case_number(row)) for row in rows[:30]]
+        rows = [row for row in rows if text in f"{row.title or ''} {case_number(row)} {client_names.get(row.client_id, '')}".lower()]
+    return [CaseSearchResult(
+        id=row.id,
+        title=row.title or "Untitled Case",
+        display_number=case_number(row),
+        client_name=client_names.get(row.client_id),
+    ) for row in rows[:30]]

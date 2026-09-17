@@ -11,7 +11,7 @@ from app.db.base import Base
 from app.models.calendar_event import CalendarEvent
 from app.models.task import Task
 from app.models.message_attachment import MessageAttachment
-from app.models.case import CaseAssignment
+from app.models.case import Case, CaseAssignment
 from app.models.client import Client, ClientAssignment
 from app.models.conversation import Conversation, ConversationParticipant, Message
 from app.models.document import Document
@@ -78,6 +78,12 @@ async def test_unread_sender_deleted_mark_read_dashboard_and_metadata(messaging)
     assert dashboard.json()['today_overview']['unread_messages_count'] == 1
     assert (await client.post(f'/api/v1/conversations/{cid}/mark-read')).status_code == 200
     assert (await client.get(f'/api/v1/conversations/{cid}')).json()['unread_count'] == 0
+    async with sessions() as db:
+        rows = (await db.scalars(select(Notification).where(Notification.user_id == 3))).all()
+        message_alert = next(row for row in rows if row.type == 'message_received')
+        document_alert = next(row for row in rows if row.type == 'document_uploaded')
+        assert message_alert.is_read is True
+        assert document_alert.is_read is False
     assert (await client.get('/api/v1/reports/dashboard/widgets')).json()['today_overview']['unread_messages_count'] == 0
     actor['id'] = 1
     second = (await client.post(f'/api/v1/conversations/{cid}/messages', json={'body': 'Second'})).json()
@@ -104,6 +110,10 @@ async def test_read_boundary_is_monotonic_future_safe_and_user_specific(messagin
     assert response.status_code == 200, response.text
     cid = response.json()['id']
     first = (await client.post(f'/api/v1/conversations/{cid}/messages', json={'body': 'First'})).json()
+
+    async with sessions() as db:
+        alerts = (await db.scalars(select(Notification).where(Notification.type == 'message_received'))).all()
+        assert [(row.user_id, row.metadata_json['conversation_id']) for row in alerts] == [(3, cid), (4, cid)]
 
     assert (await client.get(f'/api/v1/conversations/{cid}')).json()['unread_count'] == 0
     actor['id'] = 3
@@ -158,6 +168,64 @@ async def test_read_boundary_is_monotonic_future_safe_and_user_specific(messagin
             ConversationParticipant.user_id == 4,
         ))
         assert carol.last_read_at is None
+
+
+@pytest.mark.asyncio
+async def test_conversation_case_link_change_unlink_persistence_and_message_tag_isolation(messaging):
+    client, sessions, actor = messaging
+    now = datetime.now(timezone.utc)
+    async with sessions() as db:
+        db.add(Case(id=3, organization_id=1, client_id=1, title='File 3', created_by=1, created_at=now, updated_at=now))
+        await db.commit()
+
+    response = await client.post('/api/v1/conversations', json={
+        'title': 'Persistent case link',
+        'conversation_type': 'internal',
+        'participant_ids': [3],
+    })
+    assert response.status_code == 200, response.text
+    cid = response.json()['id']
+
+    linked = await client.patch(f'/api/v1/conversations/{cid}', json={'case_id': 1})
+    assert linked.status_code == 200 and linked.json()['case_id'] == 1
+    sent = await client.post(f'/api/v1/conversations/{cid}/messages', json={'body': 'Keep link'})
+    assert sent.status_code == 200
+    assert (await client.get(f'/api/v1/conversations/{cid}')).json()['case_id'] == 1
+    assert (await client.get('/api/v1/conversations')).json()[0]['case_id'] == 1
+
+    changed = await client.patch(f'/api/v1/conversations/{cid}', json={'case_id': 3})
+    assert changed.status_code == 200 and changed.json()['case_id'] == 3
+
+    tagged = await client.post(f'/api/v1/conversations/{cid}/messages', json={
+        'body': 'Message-level reference',
+        'case_reference_ids': [1],
+    })
+    assert tagged.status_code == 200 and tagged.json()['case_references'][0]['case_id'] == 1
+    assert (await client.get(f'/api/v1/conversations/{cid}')).json()['case_id'] == 3
+
+    actor['id'] = 4
+    assert (await client.patch(f'/api/v1/conversations/{cid}', json={'case_id': 1})).status_code == 403
+    actor['id'] = 1
+    assert (await client.patch(f'/api/v1/conversations/{cid}', json={'case_id': 2})).status_code == 400
+
+    unlinked = await client.patch(f'/api/v1/conversations/{cid}', json={'case_id': None})
+    assert unlinked.status_code == 200 and unlinked.json()['case_id'] is None
+    assert (await client.get(f'/api/v1/conversations/{cid}')).json()['case_id'] is None
+
+
+@pytest.mark.asyncio
+async def test_case_search_supports_title_number_client_and_org_isolation(messaging):
+    client, _, _ = messaging
+    for query in ('File 1', 'CASE000001', 'Client 1'):
+        response = await client.get('/api/v1/conversations/cases/search', params={'q': query})
+        assert response.status_code == 200, response.text
+        assert response.json() == [{
+            'id': 1,
+            'title': 'File 1',
+            'display_number': 'CASE000001',
+            'client_name': 'Client 1',
+        }]
+    assert (await client.get('/api/v1/conversations/cases/search', params={'q': 'File 2'})).json() == []
 
 
 @pytest.mark.asyncio

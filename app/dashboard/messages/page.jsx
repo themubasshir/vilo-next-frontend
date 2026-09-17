@@ -188,6 +188,10 @@ function MessagesPageContent() {
   const [caseSearch, setCaseSearch] = useState("");
   const [caseSearchRows, setCaseSearchRows] = useState([]);
   const [showCasePicker, setShowCasePicker] = useState(false);
+  const [casePickerMode, setCasePickerMode] = useState("message");
+  const [casePickerSelection, setCasePickerSelection] = useState(null);
+  const [caseLinkSaving, setCaseLinkSaving] = useState(false);
+  const [caseLinkError, setCaseLinkError] = useState("");
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [participantQuery, setParticipantQuery] = useState("");
   const [participantRows, setParticipantRows] = useState([]);
@@ -292,7 +296,7 @@ function MessagesPageContent() {
       }
       const requested = Number(searchParams.get("conversation") || 0);
       if (requested) return summaries.find((row) => Number(row.id) === requested) || null;
-      return searchParams.get("filter") === "unread" ? null : summaries[0] || null;
+      return null;
     });
     return summaries;
   }
@@ -557,6 +561,7 @@ function MessagesPageContent() {
     setComposerRefs((prev) => (prev.some((item) => item.id === row.id) ? prev : [...prev, row]));
     setShowCasePicker(false);
     setCaseSearch("");
+    setCasePickerSelection(null);
   }
 
   function addParticipant(user) {
@@ -582,9 +587,46 @@ function MessagesPageContent() {
     setSelectedCase(null);
   }
 
-  async function openCasePicker() {
+  async function openCasePicker(mode = "message") {
+    setCasePickerMode(mode);
+    setCasePickerSelection(mode === "conversation" && selected?.case_id ? {
+      id: selected.case_id,
+      title: selected.case_title || selectedConversationCase?.title || `Case #${selected.case_id}`,
+      display_number: selectedCaseLabel,
+      client_name: selectedConversationCase?.client_name || selectedConversationCase?.client?.name || null,
+    } : null);
+    setCaseLinkError("");
+    setCaseSearch("");
     setShowCasePicker(true);
-    if (!caseSearchRows.length) await searchCases("");
+    await searchCases("");
+  }
+
+  async function updateConversationCase(caseId) {
+    if (!selected?.id || caseLinkSaving) return;
+    setCaseLinkSaving(true);
+    setCaseLinkError("");
+    try {
+      const updated = await apiRequest(`/api/v1/conversations/${selected.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ case_id: caseId }),
+      });
+      setSelected(updated);
+      selectedRef.current = updated;
+      setConversations((current) => current.map((row) => row.id === updated.id ? updated : row));
+      setShowCasePicker(false);
+      setCasePickerSelection(null);
+      setCaseSearch("");
+    } catch (err) {
+      setCaseLinkError(err.message || "Failed to update the related case");
+    } finally {
+      setCaseLinkSaving(false);
+    }
+  }
+
+  function confirmCasePicker() {
+    if (!casePickerSelection) return;
+    if (casePickerMode === "conversation") updateConversationCase(Number(casePickerSelection.id));
+    else addCaseRef(casePickerSelection);
   }
 
   async function addThreadParticipant(user) {
@@ -792,7 +834,7 @@ function MessagesPageContent() {
               <div className="messages-empty">
                 <div className="messages-empty-state messages-empty-state--thread">
                   <strong>No conversation selected</strong>
-                  <span>Choose a conversation from the list to view the thread.</span>
+                  <span>Select a conversation to view messages.</span>
                 </div>
               </div>
             ) : (
@@ -861,8 +903,8 @@ function MessagesPageContent() {
                                   <small>{attachmentTypeLabel(attachment)} · {formatAttachmentSize(attachment.file_size)}</small>
                                 </span>
                                 <div className="message-attachment__actions">
-                                  {["application/pdf", "image/jpeg", "image/png"].includes(attachment.file_type) ? <button type="button" onClick={() => openPreview({ path: `/api/v1/conversations/attachments/${attachment.id}/view`, downloadPath: `/api/v1/conversations/attachments/${attachment.id}/download`, filename: attachment.file_name })} aria-label={`Preview ${attachment.file_name}`}>View</button> : null}
-                                  <button type="button" onClick={() => downloadAttachment(attachment)} aria-label={`Download ${attachment.file_name}`}>Download</button>
+                                  {["application/pdf", "image/jpeg", "image/png"].includes(attachment.file_type) ? <button type="button" onClick={(event) => { event.stopPropagation(); openPreview({ path: `/api/v1/conversations/attachments/${attachment.id}/view`, downloadPath: `/api/v1/conversations/attachments/${attachment.id}/download`, filename: attachment.file_name }); }} aria-label={`Preview ${attachment.file_name}`}>View</button> : null}
+                                  <button type="button" onClick={(event) => { event.stopPropagation(); downloadAttachment(attachment); }} aria-label={`Download ${attachment.file_name}`}>Download</button>
                                 </div>
                               </div>)}
                             </div> : null}
@@ -918,9 +960,9 @@ function MessagesPageContent() {
                         <button
                           type="button"
                           className="messages-link-case-button"
-                          onClick={openCasePicker}
+                          onClick={() => openCasePicker("message")}
                         >
-                          <span>Link Case</span>
+                          <span>Tag Message to Case</span>
                         </button>
                         </div>
                         <button type="submit" className="vilo-btn vilo-btn--primary messages-send-button" disabled={sending || (!messageBody.trim() && !attachments.length)}>
@@ -951,10 +993,14 @@ function MessagesPageContent() {
                   {selected.case_id ? <div className="messages-related-case">
                     <strong>{selected.case_title || selectedConversationCase?.title || `Case #${selected.case_id}`}</strong>
                     {selectedCaseLabel ? <span>{selectedCaseLabel}</span> : null}
-                    <Link href={`/dashboard/cases/${selected.case_id}`} className="vilo-btn vilo-btn--secondary vilo-btn--xs">Open Case</Link>
+                    <div className="messages-related-case__actions">
+                      <Link href={`/dashboard/cases/${selected.case_id}`} className="vilo-btn vilo-btn--secondary vilo-btn--xs">Open Case</Link>
+                      <button type="button" className="vilo-btn vilo-btn--ghost vilo-btn--xs" onClick={() => openCasePicker("conversation")}>Change Link</button>
+                      <button type="button" className="messages-details__text-action" disabled={caseLinkSaving} onClick={() => updateConversationCase(null)}>Remove Link</button>
+                    </div>
                   </div> : <div className="messages-details__empty">
                     <span>No case linked.</span>
-                    <button type="button" className="vilo-btn vilo-btn--secondary vilo-btn--xs" onClick={openCasePicker}>Link to Case</button>
+                    <button type="button" className="vilo-btn vilo-btn--secondary vilo-btn--xs" onClick={() => openCasePicker("conversation")}>Link to Case</button>
                   </div>}
                 </section>
 
@@ -1192,9 +1238,12 @@ function MessagesPageContent() {
 
       {showCasePicker ? (
         <div className="vilo-modal-overlay" onClick={() => setShowCasePicker(false)}>
-          <div className="vilo-modal" onClick={(event) => event.stopPropagation()}>
+          <div className="vilo-modal messages-case-picker-modal" onClick={(event) => event.stopPropagation()}>
             <div className="vilo-modal__header">
-              <h3>Link Case</h3>
+              <div>
+                <h3>{casePickerMode === "conversation" ? "Link Conversation to Case" : "Tag Message to Case"}</h3>
+                <p>{casePickerMode === "conversation" ? "Choose the Case/File related to this entire conversation." : "Add a Case/File reference to this message only."}</p>
+              </div>
               <button type="button" className="vilo-btn vilo-btn--ghost vilo-btn--xs" onClick={() => setShowCasePicker(false)}>Close</button>
             </div>
             <div className="vilo-modal__body">
@@ -1202,7 +1251,9 @@ function MessagesPageContent() {
                 <label className="messages-search-field">
                   <SearchIcon />
                   <input
-                    placeholder="Search case title or number"
+                    autoFocus
+                    aria-label="Search cases"
+                    placeholder="Search title, Case/File number, or client"
                     value={caseSearch}
                     onChange={async (event) => {
                       const next = event.target.value;
@@ -1219,12 +1270,26 @@ function MessagesPageContent() {
                     </div>
                   ) : null}
                   {caseSearchRows.map((row) => (
-                    <button key={row.id} type="button" className="messages-case-search-item" onClick={() => addCaseRef(row)}>
-                      <strong>{row.title}</strong>
-                      <span>{row.display_number || `#${row.id}`}</span>
+                    <button key={row.id} type="button" className={`messages-case-search-item${Number(casePickerSelection?.id) === Number(row.id) ? " is-selected" : ""}`} aria-pressed={Number(casePickerSelection?.id) === Number(row.id)} onClick={() => setCasePickerSelection(row)}>
+                      <span className="messages-case-search-item__copy">
+                        <strong>{row.title}</strong>
+                        <span>{row.display_number || `#${row.id}`}</span>
+                        {row.client_name ? <small>{row.client_name}</small> : null}
+                      </span>
+                      <span className="messages-case-search-item__check" aria-hidden="true">{Number(casePickerSelection?.id) === Number(row.id) ? "✓" : ""}</span>
                     </button>
                   ))}
                 </div>
+                {caseLinkError ? <p className="vilo-state vilo-state--error">{caseLinkError}</p> : null}
+              </div>
+            </div>
+            <div className="vilo-modal__footer messages-case-picker-modal__footer">
+              {casePickerMode === "conversation" && selected?.case_id ? <button type="button" className="vilo-btn vilo-btn--danger" disabled={caseLinkSaving} onClick={() => updateConversationCase(null)}>Remove Link</button> : <span />}
+              <div>
+                <button type="button" className="vilo-btn vilo-btn--secondary" disabled={caseLinkSaving} onClick={() => setShowCasePicker(false)}>Cancel</button>
+                <button type="button" className="vilo-btn vilo-btn--primary" disabled={!casePickerSelection || caseLinkSaving} onClick={confirmCasePicker}>
+                  {caseLinkSaving ? "Saving..." : casePickerMode === "conversation" ? "Link Selected Case" : "Tag Selected Case"}
+                </button>
               </div>
             </div>
           </div>
