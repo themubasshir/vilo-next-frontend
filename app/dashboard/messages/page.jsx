@@ -92,14 +92,38 @@ function SearchIcon() {
   );
 }
 
-function DotsIcon() {
+function DetailsIcon() {
   return (
     <IconBase>
-      <path d="M5 12h.01" />
-      <path d="M12 12h.01" />
-      <path d="M19 12h.01" />
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <path d="M14 4v16" />
+      <path d="M17 9h1" />
+      <path d="M17 13h1" />
     </IconBase>
   );
+}
+
+function ArrowLeftIcon() {
+  return (
+    <IconBase>
+      <path d="m15 18-6-6 6-6" />
+    </IconBase>
+  );
+}
+
+function FileIcon() {
+  return (
+    <IconBase>
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z" />
+      <path d="M14 2v6h6" />
+    </IconBase>
+  );
+}
+
+function attachmentTypeLabel(attachment) {
+  const subtype = String(attachment?.file_type || "").split("/")[1];
+  const extension = String(attachment?.file_name || "").split(".").pop();
+  return String(subtype || extension || "File").replace("jpeg", "JPG").toUpperCase();
 }
 
 function PaperclipIcon() {
@@ -115,17 +139,6 @@ function SendIcon() {
     <IconBase>
       <path d="M22 2 11 13" />
       <path d="m22 2-7 20-4-9-9-4 20-7Z" />
-    </IconBase>
-  );
-}
-
-function UsersIcon() {
-  return (
-    <IconBase>
-      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-      <circle cx="9" cy="7" r="4" />
-      <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
-      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
     </IconBase>
   );
 }
@@ -194,6 +207,10 @@ function MessagesPageContent() {
   const [sendError, setSendError] = useState("");
   const [createError, setCreateError] = useState("");
   const [meId, setMeId] = useState(null);
+  const [currentUser, setCurrentUser] = useState(null);
+  const [showDetails, setShowDetails] = useState(false);
+  const [showAddParticipant, setShowAddParticipant] = useState(false);
+  const [participantActionLoading, setParticipantActionLoading] = useState(false);
 
   selectedRef.current = selected;
   threadVisible.current = !showCreateModal && !showCasePicker;
@@ -201,8 +218,8 @@ function MessagesPageContent() {
   const requestedClientId = Number(searchParams.get("client_id") || 0);
 
   const usersById = useMemo(
-    () => new Map(users.map((user) => [Number(user.id), user])),
-    [users],
+    () => new Map([...(currentUser ? [currentUser] : []), ...users].map((user) => [Number(user.id), user])),
+    [currentUser, users],
   );
 
   const clientsById = useMemo(
@@ -326,6 +343,7 @@ function MessagesPageContent() {
       setCases(caseRows || []);
       setClients(clientRows || []);
       setMeId(me?.id || null);
+      setCurrentUser(me || null);
       await Promise.all([loadConversations(), loadUsers("", me?.id || null)]);
     } catch (err) {
       setError(err.message || "Failed to load messaging workspace");
@@ -421,12 +439,12 @@ function MessagesPageContent() {
   }, [showCreateModal]);
 
   useEffect(() => {
-    if (!showCreateModal) return;
+    if (!showCreateModal && !showAddParticipant) return;
     const handle = setTimeout(() => {
       loadUsers(participantQuery.trim(), meId);
     }, 180);
     return () => clearTimeout(handle);
-  }, [participantQuery, showCreateModal]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [participantQuery, showAddParticipant, showCreateModal]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const filteredConversations = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -441,7 +459,7 @@ function MessagesPageContent() {
 
   const selectedTitle = selected ? conversationLabel(selected) : "";
   const selectedConversationCase = selected?.case_id ? casesById.get(Number(selected.case_id)) : null;
-  const selectedCaseLabel = selected?.case_display_number || (selectedCase ? `CASE${String(selectedCase.id).padStart(6, "0")}` : "");
+  const selectedCaseLabel = selected?.case_display_number || (selectedConversationCase ? `CASE${String(selectedConversationCase.id).padStart(6, "0")}` : "");
   const selectedParticipantNames = useMemo(() => {
     if (!threadParticipants.length) return [];
     return threadParticipants.map((participant) => {
@@ -465,6 +483,25 @@ function MessagesPageContent() {
     return createCaseRows.filter((row) => Number(casesById.get(Number(row.id))?.client_id) === requestedClientId);
   }, [casesById, createCaseRows, requestedClientId]);
 
+  const unreadTotal = useMemo(
+    () => conversations.reduce((total, conversation) => total + Number(conversation.unread_count || 0), 0),
+    [conversations],
+  );
+
+  const sharedFiles = useMemo(() => {
+    const seen = new Set();
+    return messages.flatMap((message) => message.attachments || []).filter((attachment) => {
+      if (seen.has(attachment.id)) return false;
+      seen.add(attachment.id);
+      return true;
+    });
+  }, [messages]);
+
+  const availableThreadParticipantRows = useMemo(() => {
+    const participantIds = new Set(threadParticipants.map((participant) => Number(participant.user_id)));
+    return participantRows.filter((user) => !participantIds.has(Number(user.id)));
+  }, [participantRows, threadParticipants]);
+
   function updateRoute(paramsPatch) {
     const params = new URLSearchParams(searchParams.toString());
     Object.entries(paramsPatch).forEach(([key, value]) => {
@@ -480,6 +517,15 @@ function MessagesPageContent() {
     selectedRef.current = conv;
     setSelected(conv);
     updateRoute({ conversation: conv.id, create: null });
+  }
+
+  function closeConversationOnMobile() {
+    selectedRef.current = null;
+    setSelected(null);
+    setMessages([]);
+    setThreadParticipants([]);
+    setShowDetails(false);
+    updateRoute({ conversation: null });
   }
 
   function chooseFilter(nextFilter) {
@@ -534,6 +580,52 @@ function MessagesPageContent() {
 
   function removeConversationCase() {
     setSelectedCase(null);
+  }
+
+  async function openCasePicker() {
+    setShowCasePicker(true);
+    if (!caseSearchRows.length) await searchCases("");
+  }
+
+  async function addThreadParticipant(user) {
+    if (!selected?.id || participantActionLoading) return;
+    setParticipantActionLoading(true);
+    setParticipantError("");
+    try {
+      await apiRequest(`/api/v1/conversations/${selected.id}/participants`, {
+        method: "POST",
+        body: JSON.stringify({ user_id: Number(user.id), role: user.role === "client" ? "client" : "member" }),
+      });
+      await Promise.all([loadParticipants(selected.id), loadConversations(selected.id)]);
+      setShowAddParticipant(false);
+      setParticipantQuery("");
+    } catch (err) {
+      setParticipantError(err.message || "Failed to add participant");
+    } finally {
+      setParticipantActionLoading(false);
+    }
+  }
+
+  async function deleteConversation() {
+    if (!selected?.id || participantActionLoading) return;
+    if (!window.confirm(`Delete “${selectedTitle}”? This action cannot be undone.`)) return;
+    setParticipantActionLoading(true);
+    setError("");
+    try {
+      await apiRequest(`/api/v1/conversations/${selected.id}`, { method: "DELETE" });
+      readThrough.current.delete(selected.id);
+      selectedRef.current = null;
+      setSelected(null);
+      setMessages([]);
+      setThreadParticipants([]);
+      setShowDetails(false);
+      updateRoute({ conversation: null });
+      await loadConversations();
+    } catch (err) {
+      setError(err.message || "Failed to delete conversation");
+    } finally {
+      setParticipantActionLoading(false);
+    }
   }
 
   async function createConversation(event) {
@@ -637,11 +729,10 @@ function MessagesPageContent() {
       {loading ? <div className="vilo-state-block"><p className="vilo-state vilo-state--loading">Loading messages...</p></div> : null}
 
       <div className="messages-shell dashboard-card">
-        <div className="messages-layout">
+        <div className={`messages-layout messages-layout--dashboard${selected ? " has-selection" : ""}`}>
           <aside className="messages-sidebar">
             <div className="messages-sidebar__head">
               <div>
-                <p className="messages-sidebar__eyebrow">Conversations</p>
                 <h2>Messages</h2>
               </div>
               <button type="button" className="vilo-btn vilo-btn--secondary messages-sidebar__new" onClick={openCreateModal}>
@@ -652,14 +743,15 @@ function MessagesPageContent() {
             <div className="messages-sidebar__search">
               <label className="messages-search-field">
                 <SearchIcon />
-                <input placeholder="Search conversations" value={query} onChange={(event) => setQuery(event.target.value)} />
+                <input aria-label="Search conversations" placeholder="Search conversations..." value={query} onChange={(event) => setQuery(event.target.value)} />
               </label>
             </div>
 
             <div className="messages-filters">
               {["all", "unread", "internal", "client", "group"].map((key) => (
                 <button key={key} type="button" className={filter === key ? "case-tab-btn is-active" : "case-tab-btn"} onClick={() => chooseFilter(key)}>
-                  {key[0].toUpperCase() + key.slice(1)}
+                  <span>{key[0].toUpperCase() + key.slice(1)}</span>
+                  {key === "unread" && unreadTotal > 0 ? <span className="messages-filter-count">{unreadTotal}</span> : null}
                 </button>
               ))}
             </div>
@@ -667,7 +759,7 @@ function MessagesPageContent() {
             <div className="messages-sidebar__list">
               {!filteredConversations.length ? (
                 <div className="messages-empty-state">
-                  <strong>{query.trim() ? "No results" : filter === "unread" ? "No unread messages." : "No conversations"}</strong>
+                  <strong>{query.trim() ? "No conversations found." : filter === "unread" ? "No unread conversations." : "No conversations found."}</strong>
                   <span>{query.trim() ? "Try another search term." : filter === "unread" ? "You’re all caught up." : "Start a new thread to begin messaging."}</span>
                 </div>
               ) : null}
@@ -682,7 +774,7 @@ function MessagesPageContent() {
                         <small>{formatConversationTime(conv.latest_message?.created_at || conv.updated_at)}</small>
                       </span>
                       <span className="messages-conversation-item__meta">
-                        {conv.case_title || titleCase(conv.conversation_type)} · {conv.participant_count || 0} participant{conv.participant_count === 1 ? "" : "s"}
+                        {titleCase(conv.conversation_type)} · {conv.case_title || (conv.conversation_type === "client" ? "No case linked" : `${conv.participant_count || 0} participant${conv.participant_count === 1 ? "" : "s"}`)}
                       </span>
                       <span className="messages-conversation-item__bottom">
                         <span className="messages-conversation-item__preview">{conv.latest_message?.body || (conv.latest_message?.attachments?.length ? `${conv.latest_message.attachments.length} attachment${conv.latest_message.attachments.length === 1 ? "" : "s"}` : "No messages yet")}</span>
@@ -707,6 +799,9 @@ function MessagesPageContent() {
               <>
                 <div className="messages-thread__head">
                   <div className="messages-thread__identity">
+                    <button type="button" className="messages-icon-button messages-thread__back" aria-label="Back to conversations" onClick={closeConversationOnMobile}>
+                      <ArrowLeftIcon />
+                    </button>
                     <span className="messages-thread__avatar">{getInitials(selectedTitle)}</span>
                     <div>
                       <div className="messages-thread__headline">
@@ -724,8 +819,9 @@ function MessagesPageContent() {
                     </div>
                   </div>
                   <div className="messages-thread__actions" aria-label="Message actions">
-                    <button type="button" className="messages-icon-button" aria-label="More actions unavailable" title="More actions unavailable">
-                      <DotsIcon />
+                    <button type="button" className="messages-details-toggle" aria-label="Open conversation details" onClick={() => setShowDetails(true)}>
+                      <DetailsIcon />
+                      <span>Details</span>
                     </button>
                   </div>
                 </div>
@@ -746,21 +842,27 @@ function MessagesPageContent() {
                   {!messagesLoading ? messages.map((msg, index) => {
                     const mine = meId && Number(msg.sender_id) === Number(meId);
                     const showDay = index === 0 || !sameDay(messages[index - 1]?.created_at, msg.created_at);
-                    const showSender = !mine && selected.conversation_type === "group";
+                    const senderName = mine ? userLabel(currentUser) : (msg.sender_name || userLabel(usersById.get(Number(msg.sender_id))));
+                    const previous = messages[index - 1];
+                    const startsGroup = index === 0 || Number(previous?.sender_id) !== Number(msg.sender_id) || !sameDay(previous?.created_at, msg.created_at);
                     return (
                       <div key={msg.id}>
                         {showDay ? <div className="messages-day-separator"><span>{formatDayLabel(msg.created_at)}</span></div> : null}
                         <div className={`message-bubble-row${mine ? " is-mine" : ""}`}>
+                          {!mine ? <span className={`message-bubble-row__avatar${startsGroup ? "" : " is-placeholder"}`} aria-hidden={!startsGroup}>{startsGroup ? getInitials(senderName) : ""}</span> : null}
                           <div className={`message-bubble${mine ? " is-mine" : ""}`}>
-                            {showSender ? <small className="message-bubble__sender">{msg.sender_name || "User"}</small> : null}
+                            {!mine && startsGroup ? <small className="message-bubble__sender">{senderName}</small> : null}
                             {msg.body ? <p>{msg.body}</p> : null}
                             {msg.attachments?.length ? <div className="message-attachments">
                               {msg.attachments.map((attachment) => <div key={attachment.id} className="message-attachment">
-                                <strong title={attachment.file_name}>{attachment.file_name}</strong>
-                                <small>{formatAttachmentSize(attachment.file_size)}</small>
-                                <div className="vilo-table-actions">
-                                  {["application/pdf", "image/jpeg", "image/png"].includes(attachment.file_type) ? <button type="button" className="vilo-btn vilo-btn--secondary vilo-btn--xs" onClick={() => openPreview({ path: `/api/v1/conversations/attachments/${attachment.id}/view`, downloadPath: `/api/v1/conversations/attachments/${attachment.id}/download`, filename: attachment.file_name })}>View</button> : null}
-                                  <button type="button" className="vilo-btn vilo-btn--secondary vilo-btn--xs" onClick={() => downloadAttachment(attachment)}>Download</button>
+                                <span className="message-attachment__icon"><FileIcon /></span>
+                                <span className="message-attachment__meta">
+                                  <strong title={attachment.file_name}>{attachment.file_name}</strong>
+                                  <small>{attachmentTypeLabel(attachment)} · {formatAttachmentSize(attachment.file_size)}</small>
+                                </span>
+                                <div className="message-attachment__actions">
+                                  {["application/pdf", "image/jpeg", "image/png"].includes(attachment.file_type) ? <button type="button" onClick={() => openPreview({ path: `/api/v1/conversations/attachments/${attachment.id}/view`, downloadPath: `/api/v1/conversations/attachments/${attachment.id}/download`, filename: attachment.file_name })} aria-label={`Preview ${attachment.file_name}`}>View</button> : null}
+                                  <button type="button" onClick={() => downloadAttachment(attachment)} aria-label={`Download ${attachment.file_name}`}>Download</button>
                                 </div>
                               </div>)}
                             </div> : null}
@@ -775,6 +877,7 @@ function MessagesPageContent() {
                             ) : null}
                             <span className="message-bubble__time">{formatBubbleTime(msg.created_at)}</span>
                           </div>
+                          {mine ? <span className={`message-bubble-row__avatar is-mine${startsGroup ? "" : " is-placeholder"}`} aria-hidden={!startsGroup}>{startsGroup ? getInitials(senderName) : ""}</span> : null}
                         </div>
                       </div>
                     );
@@ -783,53 +886,120 @@ function MessagesPageContent() {
                 </div>
 
                 <form className="messages-thread__composer" onSubmit={sendMessage}>
-                  <DocumentFileSelection key={selected.id} files={attachments} onChange={setAttachments} disabled={sending} maxFiles={5} compact label="message attachments"><PaperclipIcon /><span>Attach documents</span></DocumentFileSelection>
-                  {composerRefs.length ? (
-                    <div className="message-composer-refs">
-                      {composerRefs.map((row) => (
-                        <span key={row.id} className="message-case-chip">
-                          Case: {row.title} ({row.display_number || `#${row.id}`})
-                          <button type="button" onClick={() => removeCaseRef(row.id)}>×</button>
-                        </span>
-                      ))}
-                    </div>
-                  ) : null}
-                  <div className="messages-composer__main">
-                    <div className="messages-composer__input-wrap">
+                  <div className="messages-composer__input-wrap">
                       <textarea
-                        placeholder="Write a message..."
+                        aria-label="Message"
+                        placeholder="Type a message..."
                         value={messageBody}
                         onChange={(event) => setMessageBody(event.target.value)}
                         onKeyDown={onComposerKeyDown}
                         disabled={sending}
                       />
-                      <div className="messages-composer__tools">
-                        <div className="messages-composer__hint">
-                          <UsersIcon />
-                          <span>{selectedParticipantNames.length ? selectedParticipantNames.join(", ") : "Conversation participants"}</span>
+                      {attachments.length ? <div className="messages-composer__attachments" aria-live="polite">
+                        {attachments.map((file) => <span className="messages-composer__attachment-chip" key={`${file.name}-${file.size}-${file.lastModified}`}>
+                          <FileIcon />
+                          <span title={file.name}>{file.name} · {formatAttachmentSize(file.size)}</span>
+                          <button type="button" disabled={sending} aria-label={`Remove ${file.name}`} onClick={() => setAttachments(attachments.filter((entry) => entry !== file))}>×</button>
+                        </span>)}
+                      </div> : null}
+                      {composerRefs.length ? (
+                        <div className="message-composer-refs">
+                          {composerRefs.map((row) => (
+                            <span key={row.id} className="message-case-chip">
+                              Case: {row.title} ({row.display_number || `#${row.id}`})
+                              <button type="button" aria-label={`Remove case reference ${row.title}`} onClick={() => removeCaseRef(row.id)}>×</button>
+                            </span>
+                          ))}
                         </div>
+                      ) : null}
+                      <div className="messages-composer__tools">
+                        <div className="messages-composer__tools-left">
+                          <DocumentFileSelection key={selected.id} files={attachments} onChange={setAttachments} disabled={sending} maxFiles={5} compact showSelection={false} label="message attachments"><PaperclipIcon /><span>Attach</span></DocumentFileSelection>
                         <button
                           type="button"
                           className="messages-link-case-button"
-                          onClick={async () => {
-                            setShowCasePicker(true);
-                            if (!caseSearchRows.length) await searchCases("");
-                          }}
+                          onClick={openCasePicker}
                         >
                           <span>Link Case</span>
                         </button>
+                        </div>
+                        <button type="submit" className="vilo-btn vilo-btn--primary messages-send-button" disabled={sending || (!messageBody.trim() && !attachments.length)}>
+                          <SendIcon />
+                          <span>{sending ? "Sending..." : "Send"}</span>
+                        </button>
                       </div>
-                    </div>
-                    <button type="submit" className="vilo-btn vilo-btn--primary messages-send-button" disabled={sending || (!messageBody.trim() && !attachments.length)}>
-                      <SendIcon />
-                      <span>{sending ? "Sending..." : "Send"}</span>
-                    </button>
                   </div>
                   {sendError ? <p className="vilo-state vilo-state--error">{sendError}</p> : null}
                 </form>
               </>
             )}
           </article>
+
+          {selected && showDetails ? <button type="button" className="messages-details-backdrop" aria-label="Close conversation details" onClick={() => setShowDetails(false)} /> : null}
+          <aside className={`messages-details${showDetails ? " is-open" : ""}`} aria-label="Conversation details">
+            {selected ? <>
+              <div className="messages-details__head">
+                <div>
+                  <span>Conversation</span>
+                  <h3>Details</h3>
+                </div>
+                <button type="button" className="messages-icon-button messages-details__close" aria-label="Close conversation details" onClick={() => setShowDetails(false)}>×</button>
+              </div>
+              <div className="messages-details__body">
+                <section className="messages-details__section">
+                  <h4>Related Case</h4>
+                  {selected.case_id ? <div className="messages-related-case">
+                    <strong>{selected.case_title || selectedConversationCase?.title || `Case #${selected.case_id}`}</strong>
+                    {selectedCaseLabel ? <span>{selectedCaseLabel}</span> : null}
+                    <Link href={`/dashboard/cases/${selected.case_id}`} className="vilo-btn vilo-btn--secondary vilo-btn--xs">Open Case</Link>
+                  </div> : <div className="messages-details__empty">
+                    <span>No case linked.</span>
+                    <button type="button" className="vilo-btn vilo-btn--secondary vilo-btn--xs" onClick={openCasePicker}>Link to Case</button>
+                  </div>}
+                </section>
+
+                <section className="messages-details__section">
+                  <h4>Shared Files <span>{sharedFiles.length}</span></h4>
+                  {sharedFiles.length ? <div className="messages-shared-files">
+                    {sharedFiles.map((attachment) => <div key={attachment.id} className="messages-shared-file">
+                      <span className="message-attachment__icon"><FileIcon /></span>
+                      <span className="message-attachment__meta">
+                        <strong title={attachment.file_name}>{attachment.file_name}</strong>
+                        <small>{attachmentTypeLabel(attachment)} · {formatAttachmentSize(attachment.file_size)}</small>
+                      </span>
+                      <span className="messages-shared-file__actions">
+                        {["application/pdf", "image/jpeg", "image/png"].includes(attachment.file_type) ? <button type="button" onClick={() => openPreview({ path: `/api/v1/conversations/attachments/${attachment.id}/view`, downloadPath: `/api/v1/conversations/attachments/${attachment.id}/download`, filename: attachment.file_name })} aria-label={`Preview ${attachment.file_name}`}>View</button> : null}
+                        <button type="button" onClick={() => downloadAttachment(attachment)} aria-label={`Download ${attachment.file_name}`}>Download</button>
+                      </span>
+                    </div>)}
+                  </div> : <p className="messages-details__empty-copy">No shared files.</p>}
+                </section>
+
+                <section className="messages-details__section">
+                  <div className="messages-details__section-head">
+                    <h4>Participants <span>{threadParticipants.length}</span></h4>
+                    <button type="button" className="messages-details__text-action" onClick={() => { setParticipantQuery(""); setParticipantError(""); setShowAddParticipant(true); }}>+ Add</button>
+                  </div>
+                  <div className="messages-participant-list">
+                    {threadParticipants.map((participant) => {
+                      const user = usersById.get(Number(participant.user_id));
+                      const name = userLabel(user);
+                      return <div key={participant.user_id} className="messages-participant">
+                        <span className="messages-participant__avatar">{getInitials(name)}</span>
+                        <span><strong>{name}</strong><small>{titleCase(user?.role || participant.role)}</small></span>
+                      </div>;
+                    })}
+                    {!threadParticipants.length ? <p className="messages-details__empty-copy">No participants to display.</p> : null}
+                  </div>
+                </section>
+
+                <section className="messages-details__section messages-details__section--actions">
+                  <h4>Conversation Actions</h4>
+                  <button type="button" className="vilo-btn vilo-btn--danger" disabled={participantActionLoading} onClick={deleteConversation}>Delete Conversation</button>
+                </section>
+              </div>
+            </> : <div className="messages-empty-state messages-empty-state--thread"><strong>Conversation details</strong><span>Select a conversation to view its context.</span></div>}
+          </aside>
         </div>
       </div>
 
@@ -986,6 +1156,34 @@ function MessagesPageContent() {
                 </div>
               </div>
             </form>
+          </div>
+        </div>
+      ) : null}
+
+      {showAddParticipant && selected ? (
+        <div className="vilo-modal-overlay" onClick={() => setShowAddParticipant(false)}>
+          <div className="vilo-modal messages-participant-modal" onClick={(event) => event.stopPropagation()}>
+            <div className="vilo-modal__header">
+              <h3>Add Participant</h3>
+              <button type="button" className="vilo-btn vilo-btn--ghost vilo-btn--xs" onClick={() => setShowAddParticipant(false)}>Close</button>
+            </div>
+            <div className="vilo-modal__body">
+              <div className="vilo-form-grid">
+                <label className="messages-search-field">
+                  <SearchIcon />
+                  <input autoFocus aria-label="Search users to add" placeholder="Search users by name or email" value={participantQuery} onChange={(event) => setParticipantQuery(event.target.value)} />
+                </label>
+                {participantError ? <p className="vilo-state vilo-state--error">{participantError}</p> : null}
+                <div className="messages-case-search-list">
+                  {participantLoading ? <div className="messages-empty-state"><strong>Loading users</strong><span>Searching organization users.</span></div> : null}
+                  {!participantLoading && !availableThreadParticipantRows.length ? <div className="messages-empty-state"><strong>No users found</strong><span>Everyone matching this search is already in the conversation.</span></div> : null}
+                  {availableThreadParticipantRows.map((user) => <button key={user.id} type="button" className="messages-case-search-item" disabled={participantActionLoading} onClick={() => addThreadParticipant(user)}>
+                    <strong>{userLabel(user)}</strong>
+                    <span>{titleCase(user.role)}</span>
+                  </button>)}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       ) : null}

@@ -9,7 +9,7 @@ export function formatAttachmentSize(bytes) {
 }
 const identity = (file) => `${file.name}\u0000${file.size}\u0000${file.lastModified}`;
 
-export default function DocumentFileSelection({ files, onChange, disabled = false, maxFiles = Infinity, label = "Client documents", compact = false, children }) {
+export default function DocumentFileSelection({ files, onChange, disabled = false, maxFiles = Infinity, label = "Client documents", compact = false, showSelection = true, children }) {
   const input = useRef(null);
   const [errors, setErrors] = useState([]);
   function add(fileList) {
@@ -37,7 +37,7 @@ export default function DocumentFileSelection({ files, onChange, disabled = fals
         <input ref={input} type="file" multiple accept={DOCUMENT_ACCEPT} hidden disabled={disabled} onChange={(event) => { add(event.target.files); event.target.value = ""; }} />
         {!compact ? <span>PDF, DOC/DOCX, JPG, PNG, TXT. Maximum 10 MiB per file.</span> : null}
       </div>
-      {files.length ? <div className="document-selection-list" aria-live="polite">
+      {showSelection && files.length ? <div className="document-selection-list" aria-live="polite">
         <strong>{files.length} {compact ? "files" : "documents"} selected</strong>
         {files.map((file) => <div className="document-selection-row" key={identity(file)}>
           <span title={file.name}>{file.name}</span><small>{formatAttachmentSize(file.size)} · Ready to upload</small>
