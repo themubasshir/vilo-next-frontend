@@ -22,16 +22,20 @@ export function TodaysOverview({ stats = fallbackStatItems, timelineRows = fallb
   const cardVariants = createCardVariants(shouldReduceMotion);
   const itemVariants = createItemVariants(shouldReduceMotion, "y", 10);
   const hoverLift = createHoverLift(shouldReduceMotion);
-  const [openMenu, setOpenMenu] = useState(null);
-  const actionAreaRef = useRef(null);
+  const [openTaskMenuId, setOpenTaskMenuId] = useState(null);
+  const [menuPlacement, setMenuPlacement] = useState({ openUpward: false, alignLeft: false });
+  const actionWrapRefs = useRef(new Map());
   const showActions = timelineRows.some((row) => row.href || row.actions?.length);
 
   useEffect(() => {
+    if (openTaskMenuId === null) return undefined;
+
     function closeOnOutsideClick(event) {
-      if (!actionAreaRef.current?.contains(event.target)) setOpenMenu(null);
+      const activeWrap = actionWrapRefs.current.get(openTaskMenuId);
+      if (!activeWrap?.contains(event.target)) setOpenTaskMenuId(null);
     }
     function closeOnEscape(event) {
-      if (event.key === "Escape") setOpenMenu(null);
+      if (event.key === "Escape") setOpenTaskMenuId(null);
     }
     document.addEventListener("pointerdown", closeOnOutsideClick);
     document.addEventListener("keydown", closeOnEscape);
@@ -39,24 +43,40 @@ export function TodaysOverview({ stats = fallbackStatItems, timelineRows = fallb
       document.removeEventListener("pointerdown", closeOnOutsideClick);
       document.removeEventListener("keydown", closeOnEscape);
     };
-  }, []);
+  }, [openTaskMenuId]);
 
-  function toggleMenu(event, rowKey) {
+  function setActionWrapRef(rowKey, node) {
+    if (node) actionWrapRefs.current.set(rowKey, node);
+    else actionWrapRefs.current.delete(rowKey);
+  }
+
+  function toggleMenu(event, rowKey, actionCount) {
+    event.stopPropagation();
+    if (openTaskMenuId === rowKey) {
+      setOpenTaskMenuId(null);
+      return;
+    }
     const rect = event.currentTarget.getBoundingClientRect();
-    const width = 190;
-    const left = Math.max(8, Math.min(window.innerWidth - width - 8, rect.right - width));
+    const menuWidth = Math.min(190, window.innerWidth - 16);
+    const menuHeight = actionCount * 43 + 12;
     const spaceBelow = window.innerHeight - rect.bottom;
-    setOpenMenu((current) => current?.id === rowKey ? null : {
-      id: rowKey,
-      left,
-      top: spaceBelow >= 110 ? rect.bottom + 6 : rect.top - 6,
-      upward: spaceBelow < 110,
+    setMenuPlacement({
+      openUpward: spaceBelow < menuHeight + 8 && rect.top > spaceBelow,
+      alignLeft: rect.right - menuWidth < 8,
     });
+    setOpenTaskMenuId(rowKey);
+  }
+
+  async function runAction(event, action) {
+    event.stopPropagation();
+    if (!action.onSelect || action.disabled) return;
+    const succeeded = await action.onSelect();
+    if (succeeded !== false) setOpenTaskMenuId(null);
   }
 
   return (
     <motion.section
-      className="dashboard-card dashboard-card--overview"
+      className={`dashboard-card dashboard-card--overview${openTaskMenuId !== null ? " is-action-menu-open" : ""}`}
       aria-labelledby="todays-overview-title"
       variants={cardVariants}
       whileHover={hoverLift}
@@ -83,7 +103,7 @@ export function TodaysOverview({ stats = fallbackStatItems, timelineRows = fallb
         ))}
       </div>
 
-      <div className="overview-table-block" ref={actionAreaRef}>
+      <div className="overview-table-block">
         <h3>Priority Timeline</h3>
 
         <div className="overview-table-wrap">
@@ -125,33 +145,57 @@ export function TodaysOverview({ stats = fallbackStatItems, timelineRows = fallb
                           href={actions[0].href}
                           className="vilo-btn vilo-btn--secondary vilo-btn--xs"
                           aria-label={`View task ${row.label}`}
+                          onClick={(event) => event.stopPropagation()}
                         >
                           View
                         </Link>
                       ) : actions.length > 1 ? (
-                        <>
+                        <div className="priority-action-wrap" ref={(node) => setActionWrapRef(rowKey, node)}>
                           <button
                             type="button"
                             className="overview-table__action-link"
-                            aria-label={`Actions for task ${row.label}`}
+                            aria-label="Task actions"
                             aria-haspopup="menu"
-                            aria-expanded={openMenu?.id === rowKey}
-                            onClick={(event) => toggleMenu(event, rowKey)}
+                            aria-expanded={openTaskMenuId === rowKey}
+                            onClick={(event) => toggleMenu(event, rowKey, actions.length)}
                           >
                             <span aria-hidden="true">•••</span>
                           </button>
-                          {openMenu?.id === rowKey ? (
+                          {openTaskMenuId === rowKey ? (
                             <div
-                              className={`case-actions-menu task-overlay-menu priority-timeline-action-menu${openMenu.upward ? " task-overlay-menu--upward" : ""}`}
+                              className={`case-actions-menu priority-timeline-action-menu${menuPlacement.openUpward ? " priority-timeline-action-menu--upward" : ""}${menuPlacement.alignLeft ? " priority-timeline-action-menu--align-left" : ""}`}
                               role="menu"
-                              style={{ left: `${openMenu.left}px`, top: `${openMenu.top}px` }}
+                              aria-label={`Actions for ${row.label}`}
+                              onClick={(event) => event.stopPropagation()}
                             >
                               {actions.map((action) => (
-                                <Link key={action.href} href={action.href} role="menuitem" onClick={() => setOpenMenu(null)}>{action.label}</Link>
+                                action.href ? (
+                                  <Link
+                                    key={action.id || action.href}
+                                    href={action.href}
+                                    role="menuitem"
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      setOpenTaskMenuId(null);
+                                    }}
+                                  >
+                                    {action.label}
+                                  </Link>
+                                ) : (
+                                  <button
+                                    key={action.id || action.label}
+                                    type="button"
+                                    role="menuitem"
+                                    disabled={action.disabled}
+                                    onClick={(event) => runAction(event, action)}
+                                  >
+                                    {action.label}
+                                  </button>
+                                )
                               ))}
                             </div>
                           ) : null}
-                        </>
+                        </div>
                       ) : (
                         <span aria-hidden="true">-</span>
                       )}

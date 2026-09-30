@@ -63,18 +63,43 @@ def test_client_timeline_view_actions_are_styled_and_keep_exact_targets():
 def test_priority_timeline_menu_and_one_action_fallback_are_semantic():
     source = (REPO_ROOT / "components/dashboard/TodaysOverview.jsx").read_text()
     dashboard = (REPO_ROOT / "app/dashboard/page.jsx").read_text()
+    styles = (REPO_ROOT / "app/globals.css").read_text()
     assert "•••" in source
+    assert 'className="priority-action-wrap"' in source
+    wrapper_styles = styles.split(".priority-action-wrap {", 1)[1].split("}", 1)[0]
+    menu_styles = styles.split(".case-actions-menu.priority-timeline-action-menu {", 1)[1].split("}", 1)[0]
+    assert "position: relative;" in wrapper_styles
+    assert "position: fixed" not in menu_styles
     assert 'aria-haspopup="menu"' in source
-    assert 'aria-expanded={openMenu?.id === rowKey}' in source
+    assert 'aria-label="Task actions"' in source
+    assert 'aria-expanded={openTaskMenuId === rowKey}' in source
     assert 'role="menu"' in source and 'role="menuitem"' in source
     assert 'event.key === "Escape"' in source
     assert 'document.addEventListener("pointerdown"' in source
+    assert "actionWrapRefs.current.get(openTaskMenuId)" in source
     assert 'aria-label={`View task ${row.label}`}' in source
     assert '>\n                          View\n                        </Link>' in source
-    assert 'onClick={(event) => toggleMenu(event, rowKey)}' in source
+    assert 'onClick={(event) => toggleMenu(event, rowKey, actions.length)}' in source
+    assert "event.stopPropagation();" in source
     assert 'href={actions[0].href}' in source
-    assert '{ label: "View Task", href: `/dashboard/tasks/${task.id}` }' in dashboard
-    assert '{ label: "Open Related Case/File", href: `/dashboard/cases/${task.related_case_id}` }' in dashboard
+    assert 'const [openTaskMenuId, setOpenTaskMenuId] = useState(null);' in source
+    assert "style={{ left:" not in source
+    assert 'label: "View Task", href: `/dashboard/tasks/${task.id}`' in dashboard
+
+
+def test_priority_timeline_actions_reuse_task_workflows_and_permissions():
+    dashboard = (REPO_ROOT / "app/dashboard/page.jsx").read_text()
+    assert 'apiRequest(`/api/v1/tasks/${taskId}/complete`, { method: "POST" })' in dashboard
+    assert '.filter((task) => Number(task.id) !== Number(taskId))' in dashboard
+    assert 'canCompleteTask && !taskIsComplete' in dashboard
+    assert '["admin", "partner", "lawyer", "paralegal"].includes(role)' in dashboard
+    assert 'role === "admin" || role === "partner"' in dashboard
+    assert 'label: "Edit Task", href: `/dashboard/tasks/${task.id}?edit=1`' in dashboard
+    assert 'accessibleCaseIds.has(linkedCaseId)' in dashboard
+    assert 'label: "Open File"' in dashboard
+    assert 'href: `/dashboard/cases/${linkedCaseId}`' in dashboard
+    assert "Open Related Case/File" not in dashboard
+    assert dashboard.index('label: "View Task"') < dashboard.index('label: "Edit Task"') < dashboard.index('label: "Mark Complete"') < dashboard.index('label: "Open File"')
 
 
 def test_precedent_frontend_paralegal_management_is_local_and_delete_is_not_exposed():

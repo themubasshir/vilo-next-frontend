@@ -621,6 +621,11 @@ button {
 .dashboard-card--overview {
   justify-content: space-between;
   padding-bottom: 1.45rem;
+  position: relative;
+}
+
+.dashboard-card--overview.is-action-menu-open {
+  z-index: 5;
 }
 
 .overview-stats {
@@ -686,7 +691,7 @@ button {
 }
 
 .overview-table-wrap {
-  overflow: hidden;
+  overflow: visible;
   border: 1px solid rgba(226, 229, 238, 0.98);
   border-radius: 10px;
   background: #fff;
@@ -742,6 +747,7 @@ button {
 .overview-table__actions {
   width: 6rem;
   text-align: center;
+  overflow: visible;
 }
 
 .overview-table__link {
@@ -772,8 +778,33 @@ button {
   transition: color 0.18s ease, background-color 0.18s ease;
 }
 
-.priority-timeline-action-menu {
-  width: 190px;
+.case-actions-menu.priority-timeline-action-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  left: auto;
+  width: min(190px, calc(100vw - 16px));
+  z-index: 30;
+}
+
+.priority-action-wrap {
+  position: relative;
+  display: inline-flex;
+  overflow: visible;
+}
+
+.case-actions-menu.priority-timeline-action-menu.priority-timeline-action-menu--upward {
+  top: auto;
+  bottom: calc(100% + 6px);
+}
+
+.case-actions-menu.priority-timeline-action-menu.priority-timeline-action-menu--align-left {
+  right: auto;
+  left: 0;
+}
+
+.priority-timeline-action-menu > :last-child {
+  border-bottom: 0;
 }
 
 .overview-table__action-link:hover,
