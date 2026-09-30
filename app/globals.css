@@ -766,7 +766,14 @@ button {
   font-size: 1.3rem;
   line-height: 1;
   text-decoration: none;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
   transition: color 0.18s ease, background-color 0.18s ease;
+}
+
+.priority-timeline-action-menu {
+  width: 190px;
 }
 
 .overview-table__action-link:hover,
@@ -5985,6 +5992,19 @@ button {
   height: auto;
   max-width: 100%;
   object-fit: contain;
+}
+
+.protected-file-preview-text {
+  min-height: 100%;
+  margin: 0;
+  padding: 1.5rem;
+  overflow: auto;
+  color: #252231;
+  background: #fff;
+  font: 0.9rem/1.55 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .protected-file-preview-message {

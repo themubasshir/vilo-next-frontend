@@ -202,6 +202,51 @@ def test_lawyer_cannot_create_master_precedent():
         cleanup(client)
 
 
+def test_paralegal_can_create_and_edit_but_cannot_delete_master_precedent():
+    created = _precedent_obj()
+    edited = _precedent_obj()
+    edited.name = "Paralegal Revised"
+    db = PrecedentDBStub(scalar_values=[created, created, edited])
+    client = build_client("paralegal", db)
+    try:
+        response = client.post(
+            "/api/v1/precedents",
+            json={
+                "name": "Employment Motion",
+                "practice_area": "employment",
+                "document_type": "motion",
+                "content_text": "Master text",
+            },
+        )
+        assert response.status_code == 200
+
+        response = client.patch("/api/v1/precedents/21", json={"name": "Paralegal Revised"})
+        assert response.status_code == 200
+        assert created.name == "Paralegal Revised"
+
+        assert client.delete("/api/v1/precedents/21").status_code == 403
+    finally:
+        cleanup(client)
+
+
+def test_paralegal_can_upload_precedent(monkeypatch, tmp_path):
+    uploaded = _precedent_obj(file_path=str(tmp_path / "1" / "stored.txt"), file_name="clauses.txt", content_text=None)
+    uploaded.file_type = "text/plain"
+    db = PrecedentDBStub(scalar_values=[uploaded])
+    client = build_client("paralegal", db)
+    monkeypatch.setattr(precedents_module, "PRECEDENT_STORAGE_ROOT", tmp_path)
+    try:
+        response = client.post(
+            "/api/v1/precedents/upload",
+            data={"name": "Clauses", "practice_area": "employment", "document_type": "agreement"},
+            files={"file": ("clauses.txt", b"plain precedent", "text/plain")},
+        )
+        assert response.status_code == 200
+        assert response.json()["file_name"] == "clauses.txt"
+    finally:
+        cleanup(client)
+
+
 def test_partner_can_create_and_immediately_retrieve_tenant_practice_area():
     db = PrecedentDBStub(scalar_values=[None])
     client = build_client("partner", db)

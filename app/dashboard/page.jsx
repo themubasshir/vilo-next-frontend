@@ -74,6 +74,10 @@ export default function DashboardPage() {
     priority: task.priority || "medium",
     tone: task.priority === "high" ? "is-high" : task.priority === "low" ? "is-low" : "is-normal",
     href: taskHref(task),
+    actions: [
+      { label: "View Task", href: `/dashboard/tasks/${task.id}` },
+      ...(task.related_case_id ? [{ label: "Open Related Case/File", href: `/dashboard/cases/${task.related_case_id}` }] : []),
+    ],
   }));
 
   const snapshotStats = [

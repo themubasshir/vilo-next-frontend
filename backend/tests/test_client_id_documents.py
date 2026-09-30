@@ -416,6 +416,32 @@ def test_authorized_document_preview_serves_exact_file_inline(monkeypatch, tmp_p
         cleanup(client)
 
 
+def test_txt_document_preview_uses_exact_bytes_inline_and_extension_mime_fallback(monkeypatch, tmp_path):
+    text_bytes = "Hello VILO — <script>alert('literal')</script>".encode("utf-8")
+    stored = tmp_path / "1" / "stored.bin"
+    stored.parent.mkdir(parents=True)
+    stored.write_bytes(text_bytes)
+    doc_row = _doc_obj(path=str(stored))
+    doc_row.file_name = "case-notes.TXT"
+    doc_row.file_type = "application/octet-stream"
+    doc_row.category = "notes"
+    client = build_client("paralegal", ClientDocsDBStub(scalar_values=[doc_row, doc_row]))
+    monkeypatch.setattr(documents_module, "STORAGE_ROOT", tmp_path)
+    try:
+        preview = client.get("/api/v1/documents/41/view")
+        assert preview.status_code == 200
+        assert preview.content == text_bytes
+        assert preview.headers["content-type"].startswith("text/plain")
+        assert preview.headers["content-disposition"].startswith("inline")
+
+        download = client.get("/api/v1/documents/41/download")
+        assert download.status_code == 200
+        assert download.content == text_bytes
+        assert download.headers["content-disposition"].startswith("attachment")
+    finally:
+        cleanup(client)
+
+
 def test_authorized_pdf_preview_returns_valid_bytes_type_and_filename(monkeypatch, tmp_path):
     pdf_bytes = b"%PDF-1.7\n% VILO preview fixture\n%%EOF\n"
     stored = tmp_path / "1" / "stored.pdf"

@@ -31,7 +31,7 @@ from app.schemas.conversation import (
     ParticipantResponse,
 )
 from app.services import message_attachments
-from app.services.document_storage import persist_file, resolve_stored_file
+from app.services.document_storage import persist_file, resolve_stored_file, resolved_media_type
 from app.services.notifications import bulk_create_notifications
 from app.services.timeline import create_case_timeline_event
 
@@ -523,8 +523,9 @@ async def attachment_file(attachment_id: int, db: AsyncSession, current_user: Us
     await get_conversation_or_404(db, current_user.organization_id, msg.conversation_id)
     await require_participant(db, current_user.organization_id, msg.conversation_id, current_user.id)
     path = resolve_stored_file(row.file_path, message_attachments.STORAGE_ROOT)
-    can_preview = row.file_type in {"application/pdf", "image/jpeg", "image/png"}
-    return FileResponse(path, media_type=row.file_type, filename=row.file_name,
+    media_type = resolved_media_type(row.file_name, row.file_type)
+    can_preview = media_type in {"application/pdf", "image/jpeg", "image/png", "text/plain"}
+    return FileResponse(path, media_type=media_type, filename=row.file_name,
         content_disposition_type="inline" if inline and can_preview else "attachment",
         headers={"X-Content-Type-Options": "nosniff", "Cache-Control": "private, no-store"})
 

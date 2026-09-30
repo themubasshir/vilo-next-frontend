@@ -42,7 +42,8 @@ from app.services.notifications import notify_case_document_added
 from app.services.timeline import create_case_timeline_event
 
 router = APIRouter(prefix="/precedents", tags=["precedents"])
-MANAGE_ROLES = ["partner", "admin"]
+MANAGE_ROLES = ["partner", "admin", "paralegal"]
+DELETE_ROLES = ["partner", "admin"]
 VIEW_ROLES = ["partner", "admin", "lawyer", "paralegal"]
 PRECEDENT_STORAGE_ROOT = Path("backend/storage/precedents")
 VALID_SORTS = {
@@ -442,7 +443,7 @@ async def delete_precedent(
     precedent_id: int,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(role_guard(MANAGE_ROLES)),
+    current_user: User = Depends(role_guard(DELETE_ROLES)),
 ):
     precedent = await get_precedent_or_404(db, precedent_id, current_user.organization_id)
     now = datetime.now(timezone.utc)

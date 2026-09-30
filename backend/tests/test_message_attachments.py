@@ -164,5 +164,10 @@ async def test_supported_formats_and_parent_reference(messaging, monkeypatch, tm
     attachment = msg['attachments'][0]
     response = await client.get(f"/api/v1/conversations/attachments/{attachment['id']}/view")
     assert response.content == data
-    assert response.headers['content-disposition'].startswith('attachment' if extension in ('doc', 'docx', 'txt') else 'inline')
+    assert response.headers['content-disposition'].startswith('attachment' if extension in ('doc', 'docx') else 'inline')
+    if extension == 'txt':
+        assert response.headers['content-type'].startswith('text/plain')
+        download = await client.get(f"/api/v1/conversations/attachments/{attachment['id']}/download")
+        assert download.content == data
+        assert download.headers['content-disposition'].startswith('attachment')
     assert (await client.post(f'/api/v1/conversations/{cid}/messages', json={'body': '  '})).status_code == 400

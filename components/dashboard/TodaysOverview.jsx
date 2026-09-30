@@ -2,6 +2,7 @@
 
 import { motion, useReducedMotion } from "framer-motion";
 import Link from "next/link";
+import { useEffect, useRef, useState } from "react";
 import { createCardVariants, createHoverLift, createItemVariants } from "../motion";
 
 const fallbackStatItems = [
@@ -21,7 +22,37 @@ export function TodaysOverview({ stats = fallbackStatItems, timelineRows = fallb
   const cardVariants = createCardVariants(shouldReduceMotion);
   const itemVariants = createItemVariants(shouldReduceMotion, "y", 10);
   const hoverLift = createHoverLift(shouldReduceMotion);
-  const showActions = timelineRows.some((row) => row.href);
+  const [openMenu, setOpenMenu] = useState(null);
+  const actionAreaRef = useRef(null);
+  const showActions = timelineRows.some((row) => row.href || row.actions?.length);
+
+  useEffect(() => {
+    function closeOnOutsideClick(event) {
+      if (!actionAreaRef.current?.contains(event.target)) setOpenMenu(null);
+    }
+    function closeOnEscape(event) {
+      if (event.key === "Escape") setOpenMenu(null);
+    }
+    document.addEventListener("pointerdown", closeOnOutsideClick);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOnOutsideClick);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, []);
+
+  function toggleMenu(event, rowKey) {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const width = 190;
+    const left = Math.max(8, Math.min(window.innerWidth - width - 8, rect.right - width));
+    const spaceBelow = window.innerHeight - rect.bottom;
+    setOpenMenu((current) => current?.id === rowKey ? null : {
+      id: rowKey,
+      left,
+      top: spaceBelow >= 110 ? rect.bottom + 6 : rect.top - 6,
+      upward: spaceBelow < 110,
+    });
+  }
 
   return (
     <motion.section
@@ -52,7 +83,7 @@ export function TodaysOverview({ stats = fallbackStatItems, timelineRows = fallb
         ))}
       </div>
 
-      <div className="overview-table-block">
+      <div className="overview-table-block" ref={actionAreaRef}>
         <h3>Priority Timeline</h3>
 
         <div className="overview-table-wrap">
@@ -65,8 +96,11 @@ export function TodaysOverview({ stats = fallbackStatItems, timelineRows = fallb
               </tr>
             </thead>
             <tbody>
-              {timelineRows.map((row, index) => (
-                <motion.tr key={`${row.priority}-${index}`} variants={itemVariants}>
+              {timelineRows.map((row, index) => {
+                const rowKey = row.id || `${row.priority}-${index}`;
+                const actions = row.actions?.length ? row.actions : (row.href ? [{ label: "View Task", href: row.href }] : []);
+                return (
+                <motion.tr key={rowKey} variants={itemVariants}>
                   <td>
                     {row.href ? (
                       <Link className="overview-table__link" href={row.href}>{row.label}</Link>
@@ -86,23 +120,46 @@ export function TodaysOverview({ stats = fallbackStatItems, timelineRows = fallb
                   </td>
                   {showActions ? (
                     <td className="overview-table__actions">
-                      {row.href ? (
+                      {actions.length === 1 ? (
                         <Link
-                          href={row.href}
-                          className="overview-table__action-link"
-                          aria-label={`Open ${row.label}`}
+                          href={actions[0].href}
+                          className="vilo-btn vilo-btn--secondary vilo-btn--xs"
+                          aria-label={`View task ${row.label}`}
                         >
-                          <span aria-hidden="true">•••</span>
+                          View
                         </Link>
+                      ) : actions.length > 1 ? (
+                        <>
+                          <button
+                            type="button"
+                            className="overview-table__action-link"
+                            aria-label={`Actions for task ${row.label}`}
+                            aria-haspopup="menu"
+                            aria-expanded={openMenu?.id === rowKey}
+                            onClick={(event) => toggleMenu(event, rowKey)}
+                          >
+                            <span aria-hidden="true">•••</span>
+                          </button>
+                          {openMenu?.id === rowKey ? (
+                            <div
+                              className={`case-actions-menu task-overlay-menu priority-timeline-action-menu${openMenu.upward ? " task-overlay-menu--upward" : ""}`}
+                              role="menu"
+                              style={{ left: `${openMenu.left}px`, top: `${openMenu.top}px` }}
+                            >
+                              {actions.map((action) => (
+                                <Link key={action.href} href={action.href} role="menuitem" onClick={() => setOpenMenu(null)}>{action.label}</Link>
+                              ))}
+                            </div>
+                          ) : null}
+                        </>
                       ) : (
-                        <span className="overview-table__action-link is-static" aria-hidden="true">
-                          •••
-                        </span>
+                        <span aria-hidden="true">-</span>
                       )}
                     </td>
                   ) : null}
                 </motion.tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>

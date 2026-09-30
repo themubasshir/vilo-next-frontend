@@ -398,7 +398,7 @@ export default function ClientDetailPage() {
     const path = isClientId
       ? `/api/v1/clients/${id}/id-documents/${documentId}/view`
       : `/api/v1/documents/${documentId}/view`;
-    void openPreview({ path, downloadPath, filename });
+    void openPreview({ path, downloadPath, filename, expectedType: getDocumentViewerType({ filename, mediaType }) });
   }
 
   async function uploadIdDocument(event) {
@@ -593,7 +593,11 @@ export default function ClientDetailPage() {
                           <td>{formatDate(row.filing_date)}</td>
                           <td><span className={`vilo-badge vilo-badge--${row.status}`}>{row.status}</span></td>
                           <td>
-                            {row.documentId ? <button type="button" className="vilo-btn vilo-btn--ghost vilo-btn--xs" onClick={() => openTimelineDocument(row)}>View</button> : row.href ? <Link href={row.href}>View</Link> : "-"}
+                            {row.documentId ? (
+                              <button type="button" className="vilo-btn vilo-btn--secondary vilo-btn--xs" onClick={() => openTimelineDocument(row)} aria-label={`View document ${row.title}`}>View</button>
+                            ) : row.href ? (
+                              <Link className="vilo-btn vilo-btn--secondary vilo-btn--xs" href={row.href} aria-label={`View ${row.title}`}>View</Link>
+                            ) : "-"}
                           </td>
                         </tr>
                       ))}

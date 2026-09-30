@@ -5,6 +5,7 @@ import Link from "next/link";
 import { apiDownload, apiRequest, apiUpload } from "../../../lib/api";
 import { getCachedUser } from "../../../lib/auth";
 import ProtectedFilePreviewModal, { useProtectedFilePreview } from "../../../components/ProtectedFilePreviewModal";
+import { getDocumentViewerType } from "../../../lib/documentViewer";
 import { formatViloDate, formatViloDateTime } from "../../../lib/dateFormat";
 import { buildPracticeAreaChoices, STANDARD_PRACTICE_AREAS } from "../../../lib/practiceAreas";
 
@@ -111,7 +112,7 @@ function parseTags(value) {
 }
 
 function roleCanManage(role) {
-  return role === "partner" || role === "admin";
+  return role === "partner" || role === "admin" || role === "paralegal";
 }
 
 function roleCanView(role) {
@@ -472,6 +473,7 @@ export default function PrecedentsPage() {
       path: `/api/v1/precedents/${detail.id}/view`,
       downloadPath: `/api/v1/precedents/${detail.id}/download`,
       filename: detail.file_name || detail.name || `Precedent #${detail.id}`,
+      expectedType: getDocumentViewerType({ filename: detail.file_name, mediaType: detail.file_type }),
     });
   }
 

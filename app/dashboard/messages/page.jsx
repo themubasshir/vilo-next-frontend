@@ -7,6 +7,7 @@ import DocumentFileSelection, { formatAttachmentSize } from "../../../components
 import ProtectedFilePreviewModal, { useProtectedFilePreview } from "../../../components/ProtectedFilePreviewModal";
 import { apiRequest, apiUpload, apiDownload } from "../../../lib/api";
 import { formatViloDate } from "../../../lib/dateFormat";
+import { getDocumentViewerType } from "../../../lib/documentViewer";
 
 const initialForm = {
   conversation_type: "internal",
@@ -903,7 +904,7 @@ function MessagesPageContent() {
                                   <small>{attachmentTypeLabel(attachment)} · {formatAttachmentSize(attachment.file_size)}</small>
                                 </span>
                                 <div className="message-attachment__actions">
-                                  {["application/pdf", "image/jpeg", "image/png"].includes(attachment.file_type) ? <button type="button" onClick={(event) => { event.stopPropagation(); openPreview({ path: `/api/v1/conversations/attachments/${attachment.id}/view`, downloadPath: `/api/v1/conversations/attachments/${attachment.id}/download`, filename: attachment.file_name }); }} aria-label={`Preview ${attachment.file_name}`}>View</button> : null}
+                                  {["pdf", "image", "text"].includes(getDocumentViewerType({ filename: attachment.file_name, mediaType: attachment.file_type })) ? <button type="button" onClick={(event) => { event.stopPropagation(); openPreview({ path: `/api/v1/conversations/attachments/${attachment.id}/view`, downloadPath: `/api/v1/conversations/attachments/${attachment.id}/download`, filename: attachment.file_name, expectedType: getDocumentViewerType({ filename: attachment.file_name, mediaType: attachment.file_type }) }); }} aria-label={`Preview ${attachment.file_name}`}>View</button> : null}
                                   <button type="button" onClick={(event) => { event.stopPropagation(); downloadAttachment(attachment); }} aria-label={`Download ${attachment.file_name}`}>Download</button>
                                 </div>
                               </div>)}
@@ -1014,7 +1015,7 @@ function MessagesPageContent() {
                         <small>{attachmentTypeLabel(attachment)} · {formatAttachmentSize(attachment.file_size)}</small>
                       </span>
                       <span className="messages-shared-file__actions">
-                        {["application/pdf", "image/jpeg", "image/png"].includes(attachment.file_type) ? <button type="button" onClick={() => openPreview({ path: `/api/v1/conversations/attachments/${attachment.id}/view`, downloadPath: `/api/v1/conversations/attachments/${attachment.id}/download`, filename: attachment.file_name })} aria-label={`Preview ${attachment.file_name}`}>View</button> : null}
+                        {["pdf", "image", "text"].includes(getDocumentViewerType({ filename: attachment.file_name, mediaType: attachment.file_type })) ? <button type="button" onClick={() => openPreview({ path: `/api/v1/conversations/attachments/${attachment.id}/view`, downloadPath: `/api/v1/conversations/attachments/${attachment.id}/download`, filename: attachment.file_name, expectedType: getDocumentViewerType({ filename: attachment.file_name, mediaType: attachment.file_type }) })} aria-label={`Preview ${attachment.file_name}`}>View</button> : null}
                         <button type="button" onClick={() => downloadAttachment(attachment)} aria-label={`Download ${attachment.file_name}`}>Download</button>
                       </span>
                     </div>)}
