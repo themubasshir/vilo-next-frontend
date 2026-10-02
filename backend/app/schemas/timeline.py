@@ -7,6 +7,7 @@ class CaseTimelineResponse(BaseModel):
     organization_id: int
     case_id: int
     actor_id: int | None
+    actor_name: str | None = None
     event_type: str
     title: str
     description: str | None

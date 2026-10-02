@@ -1,5 +1,7 @@
 "use client";
 
+import MessageReceipt from "../../../components/MessageReceipt";
+
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -893,33 +895,35 @@ function MessagesPageContent() {
                         {showDay ? <div className="messages-day-separator"><span>{formatDayLabel(msg.created_at)}</span></div> : null}
                         <div className={`message-bubble-row${mine ? " is-mine" : ""}`}>
                           {!mine ? <span className={`message-bubble-row__avatar${startsGroup ? "" : " is-placeholder"}`} aria-hidden={!startsGroup}>{startsGroup ? getInitials(senderName) : ""}</span> : null}
-                          <div className={`message-bubble${mine ? " is-mine" : ""}`}>
-                            {!mine && startsGroup ? <small className="message-bubble__sender">{senderName}</small> : null}
-                            {msg.body ? <p>{msg.body}</p> : null}
-                            {msg.attachments?.length ? <div className="message-attachments">
-                              {msg.attachments.map((attachment) => <div key={attachment.id} className="message-attachment">
-                                <span className="message-attachment__icon"><FileIcon /></span>
-                                <span className="message-attachment__meta">
-                                  <strong title={attachment.file_name}>{attachment.file_name}</strong>
-                                  <small>{attachmentTypeLabel(attachment)} · {formatAttachmentSize(attachment.file_size)}</small>
-                                </span>
-                                <div className="message-attachment__actions">
-                                  {["pdf", "image", "text"].includes(getDocumentViewerType({ filename: attachment.file_name, mediaType: attachment.file_type })) ? <button type="button" onClick={(event) => { event.stopPropagation(); openPreview({ path: `/api/v1/conversations/attachments/${attachment.id}/view`, downloadPath: `/api/v1/conversations/attachments/${attachment.id}/download`, filename: attachment.file_name, expectedType: getDocumentViewerType({ filename: attachment.file_name, mediaType: attachment.file_type }) }); }} aria-label={`Preview ${attachment.file_name}`}>View</button> : null}
-                                  <button type="button" onClick={(event) => { event.stopPropagation(); downloadAttachment(attachment); }} aria-label={`Download ${attachment.file_name}`}>Download</button>
+                          <div className={`message-group${mine ? " is-mine" : ""}`}>
+                            <div className={`message-bubble${mine ? " is-mine" : ""}`}>
+                              {!mine && startsGroup ? <small className="message-bubble__sender">{senderName}</small> : null}
+                              {msg.body ? <p>{msg.body}</p> : null}
+                              {msg.attachments?.length ? <div className="message-attachments">
+                                {msg.attachments.map((attachment) => <div key={attachment.id} className="message-attachment">
+                                  <span className="message-attachment__icon"><FileIcon /></span>
+                                  <span className="message-attachment__meta">
+                                    <strong title={attachment.file_name}>{attachment.file_name}</strong>
+                                    <small>{attachmentTypeLabel(attachment)} · {formatAttachmentSize(attachment.file_size)}</small>
+                                  </span>
+                                  <div className="message-attachment__actions">
+                                    {["pdf", "image", "text"].includes(getDocumentViewerType({ filename: attachment.file_name, mediaType: attachment.file_type })) ? <button type="button" onClick={(event) => { event.stopPropagation(); openPreview({ path: `/api/v1/conversations/attachments/${attachment.id}/view`, downloadPath: `/api/v1/conversations/attachments/${attachment.id}/download`, filename: attachment.file_name, expectedType: getDocumentViewerType({ filename: attachment.file_name, mediaType: attachment.file_type }) }); }} aria-label={`Preview ${attachment.file_name}`}>View</button> : null}
+                                    <button type="button" onClick={(event) => { event.stopPropagation(); downloadAttachment(attachment); }} aria-label={`Download ${attachment.file_name}`}>Download</button>
+                                  </div>
+                                </div>)}
+                              </div> : null}
+                              {msg.case_references?.length ? (
+                                <div className="message-bubble__refs">
+                                  {msg.case_references.map((ref) => (
+                                    <Link key={`${msg.id}-${ref.case_id}`} href={`/dashboard/cases/${ref.case_id}`} className="message-case-chip">
+                                      Case: {ref.case_title} ({ref.case_display_number || `#${ref.case_id}`})
+                                    </Link>
+                                  ))}
                                 </div>
-                              </div>)}
-                            </div> : null}
-                            {msg.case_references?.length ? (
-                              <div className="message-bubble__refs">
-                                {msg.case_references.map((ref) => (
-                                  <Link key={`${msg.id}-${ref.case_id}`} href={`/dashboard/cases/${ref.case_id}`} className="message-case-chip">
-                                    Case: {ref.case_title} ({ref.case_display_number || `#${ref.case_id}`})
-                                  </Link>
-                                ))}
-                              </div>
-                            ) : null}
-                            <span className="message-bubble__time">{formatBubbleTime(msg.created_at)}{mine ? <span className={`message-receipt${msg.delivery_status === "read" ? " is-read" : ""}`} role="img" aria-label={msg.delivery_status === "read" ? `Read at ${formatBubbleTime(msg.read_at)}` : msg.delivery_status === "delivered" ? "Delivered" : "Sent"}>{msg.delivery_status === "read" || msg.delivery_status === "delivered" ? "✓✓" : "✓"}</span> : null}</span>
-                            {mine && msg.delivery_status === "read" && msg.read_at ? <small className="message-read-time">Read {formatBubbleTime(msg.read_at)}</small> : null}
+                              ) : null}
+                              <span className="message-bubble__time">{formatBubbleTime(msg.created_at)}</span>
+                            </div>
+                            {mine ? <MessageReceipt status={msg.delivery_status} readAt={msg.read_at} formatTime={formatBubbleTime} /> : null}
                           </div>
                           {mine ? <span className={`message-bubble-row__avatar is-mine${startsGroup ? "" : " is-placeholder"}`} aria-hidden={!startsGroup}>{startsGroup ? getInitials(senderName) : ""}</span> : null}
                         </div>

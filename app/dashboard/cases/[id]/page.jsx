@@ -1,5 +1,7 @@
 "use client";
 
+import { formatTimelineEventType, formatTimelineTime } from "../../../../lib/timeline";
+
 import DocumentLastEdited from "../../../../components/DocumentLastEdited";
 
 import CaseTeamMembers from "../../../../components/dashboard/CaseTeamMembers";
@@ -166,6 +168,7 @@ export default function CaseDetailPage() {
   }, [id]);
 
   function openModal(type, row = null) {
+    setMenuOpenId(null);
     setModalType(type);
     setSelectedRow(row);
     if (type === "add") setEventForm(EMPTY_EVENT);
@@ -482,6 +485,9 @@ export default function CaseDetailPage() {
     title: entry.title || "Timeline event",
     eventType: entry.event_type || "event",
     eventDate: entry.event_date || entry.created_at,
+    timestamp: entry.created_at,
+    actorName: entry.actor_name || "—",
+    metadata: entry.metadata || {},
     completed: entry.completed ? "Yes" : "No",
     status: entry.status || "active",
     description: entry.description || "",
@@ -615,19 +621,18 @@ export default function CaseDetailPage() {
                 </div>
 
                 <div className="vilo-table-wrap case-table-wrap case-table-wrap--menu-visible">
-                  <table className="team-table">
+                  <table className="team-table case-timeline-table">
                     <thead>
-                      <tr><th>#</th><th>Title</th><th>Event Type</th><th>Event Date</th><th>Completed</th><th>Status</th><th>Actions</th></tr>
+                      <tr><th>Title</th><th>Event Type</th><th>Event Date</th><th>Time</th><th>User</th><th>Actions</th></tr>
                     </thead>
                     <tbody>
                       {paginatedRows.map((row) => (
                         <tr key={row.id}>
-                          <td>{row.n}</td>
-                          <td>{row.title}</td>
-                          <td><span className="vilo-badge vilo-badge--completed">{row.eventType}</span></td>
-                          <td>{fmtDate(row.eventDate)}</td>
-                          <td><span className={`vilo-badge ${row.completed === "Yes" ? "vilo-badge--active" : "vilo-badge--priority-medium"}`}>{row.completed}</span></td>
-                          <td><span className={`vilo-badge ${row.status === "active" ? "vilo-badge--active" : "vilo-badge--cancelled"}`}>{row.status}</span></td>
+                          <td className="timeline-title">{row.title}</td>
+                          <td><span className="vilo-badge vilo-badge--completed">{formatTimelineEventType(row.eventType)}</span></td>
+                          <td className="timeline-date">{fmtDate(row.timestamp)}</td>
+                          <td className="timeline-time">{formatTimelineTime(row.timestamp)}</td>
+                          <td className="timeline-user">{row.actorName}</td>
                           <td>
                             <div className="vilo-table-actions case-row-actions" style={{ position: "relative" }}>
                               <button className="vilo-btn vilo-btn--ghost vilo-btn--xs" onClick={() => setMenuOpenId(menuOpenId === row.id ? null : row.id)}>•••</button>
@@ -837,11 +842,13 @@ export default function CaseDetailPage() {
         <Modal title="View Timeline Event" onClose={() => setModalType("")}>
           <div className="vilo-form-grid">
             <p><strong>Title:</strong> {selectedRow.title}</p>
-            <p><strong>Event Type:</strong> {selectedRow.eventType}</p>
+            <p><strong>Event Type:</strong> {formatTimelineEventType(selectedRow.eventType)}</p>
             <p><strong>Event Date:</strong> {fmtDate(selectedRow.eventDate)}</p>
             <p><strong>Completed:</strong> {selectedRow.completed}</p>
             <p><strong>Status:</strong> {selectedRow.status}</p>
             <p><strong>Description:</strong> {selectedRow.description || "-"}</p>
+            {selectedRow.metadata.document_id ? <Link className="vilo-btn vilo-btn--secondary" href={`/dashboard/documents?document_id=${encodeURIComponent(selectedRow.metadata.document_id)}`}>View Document</Link> : null}
+            {selectedRow.metadata.task_id ? <Link className="vilo-btn vilo-btn--secondary" href={`/dashboard/tasks/${encodeURIComponent(selectedRow.metadata.task_id)}`}>View Task</Link> : null}
           </div>
         </Modal>
       ) : null}

@@ -10892,15 +10892,39 @@ button {
   font-weight: 400;
   line-height: 1.45;
 }
-.message-receipt {
-  display: inline-block;
-  margin-left: 0.4rem;
-  padding: 0 0.25rem;
-  border-radius: 3px;
-  background: #f6f5ff;
-  color: #667085;
-  line-height: 1.15;
-  letter-spacing: -0.2em;
+/* The group keeps the timestamp inside and the receipt aligned beneath the bubble. */
+.message-group {
+  min-width: 0;
+  max-width: min(72%, 760px);
 }
+.message-group .message-bubble {
+  min-width: min(10rem, 100%);
+  max-width: 100%;
+}
+.message-group .message-bubble__time {
+  display: block;
+  text-align: right;
+}
+.message-group.is-mine {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+.message-receipt {
+  display: flex;
+  justify-content: flex-end;
+  align-items: baseline;
+  gap: 0.3rem;
+  margin-top: 4px;
+  color: #667085;
+  font-size: 0.72rem;
+  line-height: 1.3;
+}
+.message-receipt__ticks { letter-spacing: 0.04em; }
 .message-receipt.is-read { color: #2583eb; }
-.message-read-time { display: block; text-align: right; color: rgba(255, 255, 255, 0.9); font-size: 0.7rem; margin-top: 0.15rem; }
+.case-timeline-table .timeline-date,
+.case-timeline-table .timeline-time { white-space: nowrap; }
+.case-timeline-table .timeline-user { max-width: 12rem; overflow-wrap: anywhere; }
+.case-timeline-table .timeline-title { overflow-wrap: anywhere; }
+@media (max-width: 900px) { .message-group { max-width: 82%; } }
+@media (max-width: 560px) { .message-group { max-width: calc(100% - 2.55rem); } }

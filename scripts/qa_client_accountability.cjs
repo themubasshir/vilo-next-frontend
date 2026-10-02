@@ -13,12 +13,12 @@ const baseCase = {id:1,title:'Smith v Brown',practice_area:'Civil Litigation',cl
  const browser=await chromium.launch({headless:true,executablePath:process.env.VILO_CHROMIUM_EXECUTABLE || undefined});
  const results=[];
  for(const zoom of [1,1.1,1.25]){
-  const context=await browser.newContext({viewport:{width:Math.round(1440/zoom),height:Math.round(960/zoom)},deviceScaleFactor:zoom});
+  const context=await browser.newContext({viewport:{width:Math.round(1440/zoom),height:Math.round(960/zoom)},deviceScaleFactor:zoom,timezoneId:'Asia/Dhaka'});
   await context.addInitScript(({user})=>{localStorage.setItem('vilo_access_token','qa-fixture');localStorage.removeItem('vilo_user');},{user});
   let activeUser=user;
   let cases=[{...baseCase}, {...baseCase,id:2,title:'Historical File',priority:'low',practice_area:null}], marked=0, created=null;
-  let messages=[{id:1,conversation_id:7,sender_id:1,body:'Outgoing sent',delivery_status:'sent',read_at:null,created_at:timestamp,attachments:[],case_references:[]},{id:2,conversation_id:7,sender_id:1,body:'Outgoing delivered',delivery_status:'delivered',read_at:null,created_at:timestamp,attachments:[],case_references:[]},{id:3,conversation_id:7,sender_id:1,body:'Outgoing read',delivery_status:'read',read_at:'2026-10-01T09:52:00Z',created_at:timestamp,attachments:[],case_references:[]},{id:4,conversation_id:7,sender_id:3,sender_name:'User B',body:'Incoming message',delivery_status:'read',created_at:timestamp,attachments:[],case_references:[]}];
-  const conv={id:7,title:'Receipt QA',conversation_type:'internal',participant_count:2,unread_count:1,latest_message:messages[3],created_at:timestamp,updated_at:timestamp};
+  let messages=[{id:1,conversation_id:7,sender_id:1,body:'Outgoing sent',delivery_status:'sent',read_at:null,created_at:timestamp,attachments:[],case_references:[]},{id:2,conversation_id:7,sender_id:1,body:'Outgoing delivered ' + 'Long message text with readable timestamp. '.repeat(12),delivery_status:'delivered',read_at:null,created_at:timestamp,attachments:[{id:21,file_name:'very-long-attachment-name-'.repeat(8)+'.txt',file_type:'text/plain',file_size:100}],case_references:[]},{id:3,conversation_id:7,sender_id:1,body:'Outgoing read',delivery_status:'read',read_at:'2026-10-01T09:52:00Z',created_at:timestamp,attachments:[],case_references:[]},{id:4,conversation_id:7,sender_id:3,sender_name:'User B',body:'Incoming message',delivery_status:'read',created_at:timestamp,attachments:[],case_references:[]}];
+  const conv={id:7,title:'Receipt QA',conversation_type:'internal',participant_count:3,unread_count:1,latest_message:messages[3],created_at:timestamp,updated_at:timestamp};
   const notifications=[{id:1,title:'Document shared',type:'document_uploaded',metadata:{document_id:51,case_id:1},is_read:false,created_at:timestamp}];
   const requests=[];
   await context.route('**/api/v1/**',async route=>{
@@ -30,6 +30,11 @@ const baseCase = {id:1,title:'Smith v Brown',practice_area:'Civil Litigation',cl
    else if(p==='/api/v1/cases'&&req.method()==='POST'){created=req.postDataJSON();const c={...baseCase,...created,id:3};cases.push(c);response=c;}
    else if(p==='/api/v1/cases')response=cases;
    else if(p==='/api/v1/cases/1')response=baseCase;
+   else if(p==='/api/v1/cases/1/timeline')response=[
+    {id:71,title:'Document edited: TEST1',event_type:'Document_onlyoffice_edited',created_at:'2026-10-02T08:07:00Z',event_date:'2025-01-01',actor_id:1,actor_name:'Daniel Brooks',metadata:{document_id:51}},
+    {id:72,title:'Document uploaded: TEST1',event_type:'document_uploaded',created_at:'2026-10-02T07:55:00Z',actor_id:3,actor_name:'Olivia Grant',metadata:{document_id:51}},
+    {id:73,title:'Task created: Prepare affidavit',event_type:'task_created',created_at:'2026-10-02T07:43:00Z',actor_id:null,actor_name:null,metadata:{task_id:23}}
+   ];
    else if(p==='/api/v1/clients')response=[{id:1,name:'Smith'}];
    else if(p==='/api/v1/clients/1')response={id:1,name:'Smith',status:'active',created_at:timestamp,updated_at:timestamp};
    else if(p==='/api/v1/team')response=[user,{...user,id:3,name:'User B',role:'lawyer'}];
@@ -89,10 +94,11 @@ const baseCase = {id:1,title:'Smith v Brown',practice_area:'Civil Litigation',cl
   await page.getByText('Outgoing read',{exact:true}).waitFor();
   await page.locator('.message-receipt').first().waitFor();assert.equal(await page.locator('.message-receipt').count(),3);
   assert.equal(await page.locator('.message-receipt.is-read').count(),1);
-  assert.equal(await page.getByRole('img',{name:'Sent',exact:true}).textContent(),'✓');
-  assert.equal(await page.getByRole('img',{name:'Delivered',exact:true}).textContent(),'✓✓');
-  await page.locator('.message-read-time').waitFor();assert(marked>0);
-  await page.screenshot({path:`${artifactDir}/vilo-messages-${Math.round(zoom*100)}.png`});
+  assert.equal(await page.getByRole('img',{name:'Sent',exact:true}).textContent(),'✓Sent');
+  assert.equal(await page.getByRole('img',{name:'Delivered',exact:true}).textContent(),'✓✓Delivered');
+  await page.locator('.message-receipt.is-read').waitFor();await verifyReceipts(page);assert(marked>0);
+  await page.locator('.message-attachment').scrollIntoViewIfNeeded();await page.screenshot({path:`${artifactDir}/vilo-message-attachment-${Math.round(zoom*100)}.png`});
+  await page.locator('.message-receipt.is-read').scrollIntoViewIfNeeded();await page.screenshot({path:`${artifactDir}/vilo-messages-${Math.round(zoom*100)}.png`});
   // Re-entry through the module URL must not restore and acknowledge the old thread.
   const beforeReturn=marked;
   await page.goto(`${baseUrl}/dashboard/documents`);
@@ -116,6 +122,14 @@ const baseCase = {id:1,title:'Smith v Brown',practice_area:'Civil Litigation',cl
   await page.getByRole('button',{name:'Create Case',exact:true}).click();await page.getByText('Case created successfully.',{exact:true}).waitFor();
   assert.equal(created.title,'Smith v Brown');assert.equal(created.practice_area,'Civil Litigation');assert.equal(created.priority,'high');
   await page.goto(`${baseUrl}/dashboard/cases/1`);await page.getByText('Case/File Title:',{exact:true}).waitFor();await page.getByText('Practice Area:',{exact:true}).waitFor();assert.equal(await page.getByText('Case Type:',{exact:true}).count(),0);
+  const timeline=page.locator('.case-timeline-table');await timeline.getByText('Document Edited',{exact:true}).waitFor();
+  assert.deepEqual(await timeline.locator('thead th').allTextContents(),['Title','Event Type','Event Date','Time','User','Actions']);
+  const edited=timeline.locator('tbody tr').filter({hasText:'Document edited: TEST1'});
+  assert.equal(await edited.locator('td').nth(2).textContent(),'02/10/2026');assert.equal(await edited.locator('td').nth(3).textContent(),'2:07 PM');assert.equal(await edited.locator('td').nth(4).textContent(),'Daniel Brooks');
+  assert.equal(await timeline.locator('tbody tr').nth(1).locator('td').nth(4).textContent(),'Olivia Grant');assert.equal(await timeline.locator('tbody tr').nth(2).locator('td').nth(4).textContent(),'—');
+  await edited.getByRole('button',{name:'•••',exact:true}).click();await edited.getByRole('button',{name:'View',exact:true}).click();assert.equal(await page.getByRole('link',{name:'View Document',exact:true}).getAttribute('href'),'/dashboard/documents?document_id=51');await page.locator('.vilo-modal').getByRole('button',{name:'Close',exact:true}).click();
+  const task=timeline.locator('tbody tr').nth(2);await task.getByRole('button',{name:'•••',exact:true}).click();await task.getByRole('button',{name:'View',exact:true}).click();assert.equal(await page.getByRole('link',{name:'View Task',exact:true}).getAttribute('href'),'/dashboard/tasks/23');await page.locator('.vilo-modal').getByRole('button',{name:'Close',exact:true}).click();
+  assert(await timeline.evaluate(el=>!el.innerText.includes('onlyoffice')));await page.screenshot({path:`${artifactDir}/vilo-timeline-${Math.round(zoom*100)}.png`});
   await page.locator('.case-tabs-nav').getByRole('button',{name:'Documents',exact:true}).click();
   await page.getByText('Last edited by Daniel Brooks on',{exact:false}).waitFor();
   await page.goto(`${baseUrl}/dashboard/clients/1`);
@@ -131,11 +145,32 @@ const baseCase = {id:1,title:'Smith v Brown',practice_area:'Civil Litigation',cl
   assert.equal(marked,beforePortal);
   await page.locator('.messages-conversation-item').first().click();
   await page.getByText('Outgoing read',{exact:true}).waitFor();
-  assert.equal(await page.locator('.message-receipt').count(),3);
+  assert.equal(await page.locator('.message-receipt').count(),3);await verifyReceipts(page);
+  await page.locator('.message-receipt.is-read').scrollIntoViewIfNeeded();await page.screenshot({path:`${artifactDir}/vilo-portal-receipts-${Math.round(zoom*100)}.png`});
   assert(marked>beforePortal);
   assert.deepEqual(errors,[]);
-  results.push({scale:zoom,checks:'notification click and exact link, one document menu, hidden-tab and module-return read guards, Case Documents and Client Timeline editors, portal neutral entry and receipt ticks, document exact link, menu anchor/bounds/topmost/upward/Escape/outside-click/exact View, editor row/preview, neutral Messages/manual-open/three tick states/incoming exclusion, practice dropdown/create/title/details/table/priority filter',pass:true});
+  results.push({scale:zoom,checks:'refined receipts DOM placement/colors/alignment, long text and attachment, group fixture, six timeline columns/types/date/time/historical actors/exact document and task links; notification click and exact link, one document menu, hidden-tab and module-return read guards, Case Documents and Client Timeline editors, portal neutral entry and receipt ticks, document exact link, menu anchor/bounds/topmost/upward/Escape/outside-click/exact View, editor row/preview, neutral Messages/manual-open/three tick states/incoming exclusion, practice dropdown/create/title/details/table/priority filter',pass:true});
   await context.close();
  }
  await browser.close();fs.writeFileSync(`${artifactDir}/vilo_batch_browser_results.json`,JSON.stringify(results,null,2));console.log(JSON.stringify(results,null,2));
 })().catch(error=>{console.error(error);process.exit(1)});
+
+async function verifyReceipts(page) {
+ const receipts=page.locator('.message-receipt');
+ for(let i=0;i<await receipts.count();i++){
+  const receipt=receipts.nth(i);
+  const result=await receipt.evaluate(el=>{
+   const bubble=el.parentElement.querySelector('.message-bubble');
+   const r=el.getBoundingClientRect(),b=bubble.getBoundingClientRect();
+   const timeElement=bubble.querySelector('.message-bubble__time');
+   const time=timeElement.getBoundingClientRect();
+   const attachment=bubble.querySelector('.message-attachment')?.getBoundingClientRect();
+   const style=getComputedStyle(el);
+   return {timeAligned:getComputedStyle(timeElement).textAlign==='right' && Math.abs(time.right-b.right+parseFloat(getComputedStyle(bubble).paddingRight)+1)<2,attachmentSafe:!attachment || (attachment.bottom<=time.top && attachment.right<=b.right),inside:bubble.contains(el),gap:r.top-b.bottom,edge:Math.abs(r.right-b.right),timeInside:time.top>=b.top&&time.bottom<=b.bottom,color:style.color,tickColor:getComputedStyle(el.firstElementChild).color,read:el.classList.contains('is-read'),background:style.backgroundColor,text:el.textContent};
+  });
+  assert.equal(result.inside,false);assert(result.timeInside);assert(result.timeAligned);assert(result.attachmentSafe);assert(result.gap>=3&&result.gap<=6);assert(result.edge<2);
+  assert.equal(result.color,result.read?'rgb(37, 131, 235)':'rgb(102, 112, 133)');assert.equal(result.tickColor,result.color);assert.equal(result.background,'rgba(0, 0, 0, 0)');
+  if(result.read)assert(result.text.includes('✓✓Read '));else assert(!result.text.includes('Read '));
+ }
+ assert.equal(await page.locator('.message-bubble-row:not(.is-mine) .message-receipt').count(),0);
+}

@@ -1,5 +1,7 @@
 "use client";
 
+import MessageReceipt from "../../../components/MessageReceipt";
+
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { apiRequest } from "../../../lib/api";
@@ -313,20 +315,22 @@ export default function PortalMessagesPage() {
                       <div key={msg.id}>
                         {showDay ? <div className="messages-day-separator"><span>{formatDayLabel(msg.created_at)}</span></div> : null}
                         <div className={`message-bubble-row${mine ? " is-mine" : ""}`}>
-                          <div className={`message-bubble${mine ? " is-mine" : ""}`}>
-                            {!mine ? <small className="message-bubble__sender">{msg.sender_name || `User #${msg.sender_id}`}</small> : null}
-                            <p>{msg.body}</p>
-                            {msg.case_references?.length ? (
-                              <div className="message-bubble__refs">
-                                {msg.case_references.map((ref) => (
-                                  <Link key={`${msg.id}-${ref.case_id}`} href={`/portal/cases/${ref.case_id}`} className="message-case-chip">
-                                    Case: {ref.case_title} ({ref.case_display_number || `#${ref.case_id}`})
-                                  </Link>
-                                ))}
-                              </div>
-                            ) : null}
-                            <span className="message-bubble__time">{formatBubbleTime(msg.created_at)}{mine ? <span className={`message-receipt${msg.delivery_status === "read" ? " is-read" : ""}`} role="img" aria-label={msg.delivery_status === "read" ? `Read at ${formatBubbleTime(msg.read_at)}` : msg.delivery_status === "delivered" ? "Delivered" : "Sent"}>{msg.delivery_status === "read" || msg.delivery_status === "delivered" ? "✓✓" : "✓"}</span> : null}</span>
-                            {mine && msg.delivery_status === "read" && msg.read_at ? <small className="message-read-time">Read {formatBubbleTime(msg.read_at)}</small> : null}
+                          <div className={`message-group${mine ? " is-mine" : ""}`}>
+                            <div className={`message-bubble${mine ? " is-mine" : ""}`}>
+                              {!mine ? <small className="message-bubble__sender">{msg.sender_name || `User #${msg.sender_id}`}</small> : null}
+                              <p>{msg.body}</p>
+                              {msg.case_references?.length ? (
+                                <div className="message-bubble__refs">
+                                  {msg.case_references.map((ref) => (
+                                    <Link key={`${msg.id}-${ref.case_id}`} href={`/portal/cases/${ref.case_id}`} className="message-case-chip">
+                                      Case: {ref.case_title} ({ref.case_display_number || `#${ref.case_id}`})
+                                    </Link>
+                                  ))}
+                                </div>
+                              ) : null}
+                              <span className="message-bubble__time">{formatBubbleTime(msg.created_at)}</span>
+                            </div>
+                            {mine ? <MessageReceipt status={msg.delivery_status} readAt={msg.read_at} formatTime={formatBubbleTime} /> : null}
                           </div>
                         </div>
                       </div>

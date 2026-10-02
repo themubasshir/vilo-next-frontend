@@ -399,9 +399,20 @@ async def get_case_timeline(
         )
         .order_by(CaseTimelineEvent.created_at.desc())
     )
+    events = rows.all()
+    actor_ids = {event.actor_id for event in events if event.actor_id is not None}
+    actor_names = {}
+    if actor_ids:
+        actors = await db.execute(
+            select(User.id, User.name).where(
+                User.id.in_(actor_ids),
+                User.organization_id == current_user.organization_id,
+            )
+        )
+        actor_names = dict(actors.all())
     output: list[CaseTimelineResponse] = []
     q = (search or "").strip().lower()
-    for e in rows.all():
+    for e in events:
         meta = e.metadata_json or {}
         ev_date_raw = meta.get("event_date")
         ev_date = None
@@ -415,6 +426,7 @@ async def get_case_timeline(
             organization_id=e.organization_id,
             case_id=e.case_id,
             actor_id=e.actor_id,
+            actor_name=actor_names.get(e.actor_id),
             event_type=e.event_type,
             title=e.title,
             description=e.description,

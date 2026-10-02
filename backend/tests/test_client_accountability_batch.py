@@ -212,8 +212,8 @@ def test_frontend_receipt_open_boundary_document_menu_contract():
     message_ui = (root / 'app/dashboard/messages/page.jsx').read_text()
     assert 'document.visibilityState !== "visible" || !threadVisible.current' in message_ui
     assert 'read_through=${encodeURIComponent(latest.created_at)}' in message_ui
-    assert 'mine ? <span className={`message-receipt' in message_ui
-    assert 'Read {formatBubbleTime(msg.read_at)}' in message_ui
+    assert 'mine ? <MessageReceipt status={msg.delivery_status} readAt={msg.read_at}' in message_ui
+    assert 'formatTime={formatBubbleTime}' in message_ui
     page = (root / 'app/dashboard/documents/page.jsx').read_text()
     assert 'params.set("document_id", requestedDocumentId)' in page
     assert '<DocumentActionsMenu open={menuOpenId === document.id}' in page
@@ -271,6 +271,11 @@ async def test_onlyoffice_authenticated_actual_editor_and_unsigned_spoof(workflo
         assert latest['last_edited_by_user_id'] == (editor_id if signed else 1)
         assert latest['last_edited_at'] != copied['last_edited_at']
         assert latest['version'] == 2
+        events = (await client.get('/api/v1/cases/1/timeline')).json()
+        edit = next(event for event in events if event['event_type'] == 'document_onlyoffice_edited')
+        assert edit['actor_id'] == (editor_id if signed else 1)
+        assert edit['actor_name'] == f"Staff {edit['actor_id']}"
+        assert edit['metadata']['document_id'] == did
     else:
         assert latest['last_edited_at'] == copied['last_edited_at'] and latest['version'] == 1
 
@@ -316,4 +321,4 @@ def test_portal_ui_intentional_open_no_first_conversation_fallback():
     assert 'selectedRef.current?.id !== conversationId' in source
     assert 'latest && document.visibilityState === "visible"' in source
     assert 'mark-read?read_through=' in source
-    assert 'mine ? <span className={`message-receipt' in source
+    assert 'mine ? <MessageReceipt status={msg.delivery_status} readAt={msg.read_at}' in source
