@@ -1,5 +1,7 @@
 "use client";
 
+import DocumentLastEdited from "./DocumentLastEdited";
+
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiDownload, apiRequest } from "../lib/api";
 
@@ -220,6 +222,7 @@ export default function OnlyOfficeDocumentModal({
           </div>
         </div>
         <div className="vilo-modal__body documents-onlyoffice-modal__body">
+          <DocumentLastEdited document={document} />
           {!fullscreen && !isViewMode ? (
             <div className="documents-onlyoffice-modal__meta">
               <p className="documents-edit-form__warning documents-edit-form__warning--compact documents-onlyoffice-modal__note">

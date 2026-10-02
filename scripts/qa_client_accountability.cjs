@@ -1,0 +1,141 @@
+// Requires an installed Playwright package; all API traffic uses isolated fixtures.
+const { chromium } = require(process.env.VILO_PLAYWRIGHT_MODULE || 'playwright');
+const baseUrl = process.env.VILO_QA_BASE_URL || 'http://127.0.0.1:3100';
+const artifactDir = process.env.VILO_QA_ARTIFACT_DIR || require('node:os').tmpdir();
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const user = {id:1,organization_id:1,name:'Daniel Brooks',email:'qa@example.test',role:'partner',status:'active'};
+const areas = ['Civil Litigation','Criminal Law','Family Law','Conveyancing','Probate & Estate','Corporate / Commercial','Employment Law','Personal Injury','Immigration','Real Estate','Other'];
+const timestamp = '2026-10-01T09:45:00Z';
+const doc = {id:51,title:'Notification document',file_name:'shared.txt',file_type:'text/plain',file_size:100,category:'general',case_id:1,client_id:1,visibility:'internal',uploaded_by:1,version:1,created_at:timestamp,updated_at:timestamp,last_edited_by_name:'Daniel Brooks',last_edited_by_user_id:1,last_edited_at:timestamp};
+const baseCase = {id:1,title:'Smith v Brown',practice_area:'Civil Litigation',client_id:1,client_name:'Smith',priority:'high',status:'active',assigned_users:[],created_at:timestamp,updated_at:timestamp};
+(async()=>{
+ const browser=await chromium.launch({headless:true,executablePath:process.env.VILO_CHROMIUM_EXECUTABLE || undefined});
+ const results=[];
+ for(const zoom of [1,1.1,1.25]){
+  const context=await browser.newContext({viewport:{width:Math.round(1440/zoom),height:Math.round(960/zoom)},deviceScaleFactor:zoom});
+  await context.addInitScript(({user})=>{localStorage.setItem('vilo_access_token','qa-fixture');localStorage.removeItem('vilo_user');},{user});
+  let activeUser=user;
+  let cases=[{...baseCase}, {...baseCase,id:2,title:'Historical File',priority:'low',practice_area:null}], marked=0, created=null;
+  let messages=[{id:1,conversation_id:7,sender_id:1,body:'Outgoing sent',delivery_status:'sent',read_at:null,created_at:timestamp,attachments:[],case_references:[]},{id:2,conversation_id:7,sender_id:1,body:'Outgoing delivered',delivery_status:'delivered',read_at:null,created_at:timestamp,attachments:[],case_references:[]},{id:3,conversation_id:7,sender_id:1,body:'Outgoing read',delivery_status:'read',read_at:'2026-10-01T09:52:00Z',created_at:timestamp,attachments:[],case_references:[]},{id:4,conversation_id:7,sender_id:3,sender_name:'User B',body:'Incoming message',delivery_status:'read',created_at:timestamp,attachments:[],case_references:[]}];
+  const conv={id:7,title:'Receipt QA',conversation_type:'internal',participant_count:2,unread_count:1,latest_message:messages[3],created_at:timestamp,updated_at:timestamp};
+  const notifications=[{id:1,title:'Document shared',type:'document_uploaded',metadata:{document_id:51,case_id:1},is_read:false,created_at:timestamp}];
+  const requests=[];
+  await context.route('**/api/v1/**',async route=>{
+   const req=route.request(),url=new URL(req.url()),p=url.pathname; requests.push({method:req.method(),path:p,search:url.search});
+   let response=[];
+   if(p==='/api/v1/auth/me')response=activeUser;
+   else if(p==='/api/v1/cases/practice-areas')response=areas;
+   else if(p==='/api/v1/cases/query'){const priority=url.searchParams.get('priority');const rows=cases.filter(c=>!priority||c.priority===priority);response={items:rows,total:rows.length,total_pages:1,counts:[{status:'active',count:cases.length}]};}
+   else if(p==='/api/v1/cases'&&req.method()==='POST'){created=req.postDataJSON();const c={...baseCase,...created,id:3};cases.push(c);response=c;}
+   else if(p==='/api/v1/cases')response=cases;
+   else if(p==='/api/v1/cases/1')response=baseCase;
+   else if(p==='/api/v1/clients')response=[{id:1,name:'Smith'}];
+   else if(p==='/api/v1/clients/1')response={id:1,name:'Smith',status:'active',created_at:timestamp,updated_at:timestamp};
+   else if(p==='/api/v1/team')response=[user,{...user,id:3,name:'User B',role:'lawyer'}];
+   else if(p==='/api/v1/documents/query'){const items=url.searchParams.has('document_id')?[doc]:[doc,{...doc,id:52,title:'Second document'}];response={items,total:items.length,total_pages:1};}
+   else if(p==='/api/v1/documents/51/view'){await route.fulfill({status:200,contentType:'text/plain',body:'Protected document text'});return;}
+   else if(p==='/api/v1/documents/51/download'){await route.fulfill({status:200,contentType:'text/plain',headers:{'content-disposition':'attachment; filename="shared.txt"'},body:'Protected document text'});return;}
+   else if(p==='/api/v1/documents')response=[doc];
+   else if(p.startsWith('/api/v1/notifications')&&req.method()==='GET')response={items:p.includes('popup')?[]:notifications,unread_count:1};
+   else if(p==='/api/v1/time-entries/active-timer')response=null;
+   else if(p==='/api/v1/portal/messages/conversations')response=[{...conv,conversation_type:'client'}];
+   else if(p==='/api/v1/portal/messages/conversations/7/messages')response=messages.map(m=>({...m,sender_id:m.sender_id===1?6:m.sender_id}));
+   else if(p==='/api/v1/portal/messages/conversations/7/mark-read'){marked++;response={ok:true};}
+   else if(p==='/api/v1/conversations')response=[conv];
+   else if(p==='/api/v1/conversations/7/messages')response=messages;
+   else if(p==='/api/v1/conversations/7/participants')response=[{user_id:1,role:'owner'},{user_id:3,role:'member'}];
+   else if(p==='/api/v1/conversations/7/mark-read'){marked++;response={ok:true};}
+   else if(p==='/api/v1/conversations/7')response=conv;
+   else if(p.includes('/reports/'))response={today_overview:{unread_messages_count:1}};
+   await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(response)});
+  });
+  const page=await context.newPage();const errors=[];page.on('pageerror',e=>{errors.push(e.message);console.error('PAGE ERROR',e.message)});page.on('console',m=>{if(m.type()==='error')console.error('CONSOLE',m.text())});
+  await page.goto(`${baseUrl}/dashboard/documents`);
+  await page.getByRole('button',{name:'Actions for Second document',exact:true}).waitFor();
+  await page.getByRole('button',{name:'Actions for Notification document',exact:true}).click();
+  await page.getByRole('heading',{name:'Documents',exact:true}).click();
+  await page.getByRole('button',{name:'Actions for Second document',exact:true}).click();
+  await page.getByRole('menu',{name:'Actions for Second document',exact:true}).waitFor();
+  assert.equal(await page.locator('.documents-actions-menu--portal').count(),1);
+  assert.equal(await page.getByRole('menu',{name:'Actions for Second document',exact:true}).count(),1);
+  await page.keyboard.press('Escape');
+  await page.getByRole('button',{name:'Notifications',exact:true}).click();
+  await page.locator('.dashboard-navbar__notification-item').filter({hasText:'Document shared'}).click();
+  await page.waitForURL('**/dashboard/documents?document_id=51');
+  try {await page.getByRole('button',{name:'Actions for Notification document',exact:true}).waitFor({timeout:10000});} catch(e){console.log('PAGE',await page.locator('body').innerText());console.log('REQUESTS',requests);await page.screenshot({path:`${artifactDir}/vilo-batch-error.png`});throw e;}
+  assert(requests.some(r=>r.path==='/api/v1/documents/query'&&r.search.includes('document_id=51')));
+  await page.getByText('Last edited by Daniel Brooks on',{exact:false}).first().waitFor();
+  const trigger=page.getByRole('button',{name:'Actions for Notification document',exact:true});
+  await trigger.click();const menu=page.getByRole('menu',{name:'Actions for Notification document',exact:true});await menu.waitFor();
+  let rect=await menu.boundingBox(),anchor=await trigger.boundingBox();const viewport=page.viewportSize();
+  assert(rect.x>=0&&rect.y>=0&&rect.x+rect.width<=viewport.width+1&&rect.y+rect.height<=viewport.height+1,JSON.stringify({rect,viewport}));
+  assert(Math.abs(rect.x+rect.width-anchor.x-anchor.width)<3||rect.x===8);
+  const hit=await menu.evaluate(el=>{const r=el.getBoundingClientRect();return el.contains(document.elementFromPoint(r.x+r.width/2,r.y+20));});assert(hit,'Menu obscured by table/pagination');
+  await page.screenshot({path:`${artifactDir}/vilo-doc-menu-${Math.round(zoom*100)}.png`});
+  await page.keyboard.press('Escape');await menu.waitFor({state:'detached'});
+  await trigger.click();await page.getByRole('heading',{name:'Documents',exact:true}).click();await menu.waitFor({state:'detached'});
+  await trigger.click();await menu.getByRole('menuitem',{name:'View',exact:true}).click();await page.getByRole('dialog').waitFor();
+  await page.getByText('Protected document text',{exact:true}).waitFor();
+  await page.getByRole('dialog').getByText('Last edited by Daniel Brooks on',{exact:false}).waitFor();
+  assert(requests.some(r=>r.path==='/api/v1/documents/51/view'));
+  await page.getByRole('button',{name:'Close preview',exact:true}).click();
+  // Force bottom-edge placement by making the viewport end just below the exact trigger.
+  anchor=await trigger.boundingBox();await page.setViewportSize({width:viewport.width,height:Math.ceil(anchor.y+anchor.height+50)});
+  await trigger.click();await menu.waitFor();rect=await menu.boundingBox();anchor=await trigger.boundingBox();assert(rect.y<anchor.y,'Expected upward placement near bottom');
+  await page.keyboard.press('Escape');await page.setViewportSize(viewport);
+  await page.goto(`${baseUrl}/dashboard/messages`);await page.getByText('Select a conversation to view messages.',{exact:true}).waitFor();assert.equal(marked,0);
+  await page.locator('.messages-conversation-item').first().click();
+  await page.getByText('Outgoing read',{exact:true}).waitFor();
+  await page.locator('.message-receipt').first().waitFor();assert.equal(await page.locator('.message-receipt').count(),3);
+  assert.equal(await page.locator('.message-receipt.is-read').count(),1);
+  assert.equal(await page.getByRole('img',{name:'Sent',exact:true}).textContent(),'✓');
+  assert.equal(await page.getByRole('img',{name:'Delivered',exact:true}).textContent(),'✓✓');
+  await page.locator('.message-read-time').waitFor();assert(marked>0);
+  await page.screenshot({path:`${artifactDir}/vilo-messages-${Math.round(zoom*100)}.png`});
+  // Re-entry through the module URL must not restore and acknowledge the old thread.
+  const beforeReturn=marked;
+  await page.goto(`${baseUrl}/dashboard/documents`);
+  await page.goto(`${baseUrl}/dashboard/messages`);
+  await page.getByText('Select a conversation to view messages.',{exact:true}).waitFor();assert.equal(marked,beforeReturn);
+  // A hidden exact deep link fetches messages without crossing the read boundary.
+  await page.addInitScript(()=>{Object.defineProperty(document,'visibilityState',{configurable:true,get:()=> 'hidden'})});
+  await page.goto(`${baseUrl}/dashboard/messages?conversation=7`);
+  await page.getByText('Outgoing read',{exact:true}).waitFor();assert.equal(marked,beforeReturn);
+  await page.evaluate(()=>{Object.defineProperty(document,'visibilityState',{configurable:true,get:()=> 'visible'});document.dispatchEvent(new Event('visibilitychange'))});
+  await page.waitForFunction(()=>document.visibilityState==='visible');
+  await page.addInitScript(()=>{Object.defineProperty(document,'visibilityState',{configurable:true,get:()=> 'visible'})});
+  await page.goto(`${baseUrl}/dashboard/cases`);await page.getByRole('columnheader',{name:'Practice Area',exact:true}).waitFor();assert.equal(await page.getByRole('columnheader',{name:'Priority',exact:true}).count(),0);
+  await page.getByText('Civil Litigation',{exact:true}).waitFor();await page.locator('.cases-filter-grid select').filter({has:page.locator('option[value=high]')}).selectOption('high');await page.getByText('Historical File',{exact:true}).waitFor({state:'detached'});
+  await page.getByRole('button',{name:'+ New Case',exact:true}).click();
+  await page.getByPlaceholder('Case title',{exact:true}).fill('Smith v Brown');
+  assert.equal(await page.locator('.case-create-modal select').filter({has:page.locator('option[value=\"Civil Litigation\"]')}).evaluate(el=>el.checkValidity()),false);
+  await page.locator('.case-create-modal select').filter({has:page.locator('option[value=\"Civil Litigation\"]')}).selectOption('Civil Litigation');
+  await page.locator('.case-create-modal select').filter({has:page.locator('option', {hasText:'Select client'})}).selectOption('1');
+  await page.locator('.case-create-modal select').filter({has:page.locator('option', {hasText:'High'})}).selectOption('high');
+  await page.getByRole('button',{name:'Create Case',exact:true}).click();await page.getByText('Case created successfully.',{exact:true}).waitFor();
+  assert.equal(created.title,'Smith v Brown');assert.equal(created.practice_area,'Civil Litigation');assert.equal(created.priority,'high');
+  await page.goto(`${baseUrl}/dashboard/cases/1`);await page.getByText('Case/File Title:',{exact:true}).waitFor();await page.getByText('Practice Area:',{exact:true}).waitFor();assert.equal(await page.getByText('Case Type:',{exact:true}).count(),0);
+  await page.locator('.case-tabs-nav').getByRole('button',{name:'Documents',exact:true}).click();
+  await page.getByText('Last edited by Daniel Brooks on',{exact:false}).waitFor();
+  await page.goto(`${baseUrl}/dashboard/clients/1`);
+  await page.getByRole('heading',{name:'Client Timeline',exact:true}).waitFor();
+  await page.getByText('Last edited by Daniel Brooks on',{exact:false}).waitFor();
+  await page.getByRole('button',{name:'View document Notification document',exact:true}).click();
+  await page.getByRole('dialog').getByText('Last edited by Daniel Brooks on',{exact:false}).waitFor();
+  await page.getByRole('button',{name:'Close preview',exact:true}).click();
+  activeUser={...user,id:6,role:'client',name:'Client Smith'};
+  const beforePortal=marked;
+  await page.goto(`${baseUrl}/portal/messages`);
+  await page.getByText('Select a conversation from the list to view your messages.',{exact:true}).waitFor();
+  assert.equal(marked,beforePortal);
+  await page.locator('.messages-conversation-item').first().click();
+  await page.getByText('Outgoing read',{exact:true}).waitFor();
+  assert.equal(await page.locator('.message-receipt').count(),3);
+  assert(marked>beforePortal);
+  assert.deepEqual(errors,[]);
+  results.push({scale:zoom,checks:'notification click and exact link, one document menu, hidden-tab and module-return read guards, Case Documents and Client Timeline editors, portal neutral entry and receipt ticks, document exact link, menu anchor/bounds/topmost/upward/Escape/outside-click/exact View, editor row/preview, neutral Messages/manual-open/three tick states/incoming exclusion, practice dropdown/create/title/details/table/priority filter',pass:true});
+  await context.close();
+ }
+ await browser.close();fs.writeFileSync(`${artifactDir}/vilo_batch_browser_results.json`,JSON.stringify(results,null,2));console.log(JSON.stringify(results,null,2));
+})().catch(error=>{console.error(error);process.exit(1)});

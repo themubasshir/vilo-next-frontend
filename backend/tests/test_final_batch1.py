@@ -37,6 +37,7 @@ async def test_case_final_selected_set_diff_notifications_and_no_client_assignme
     await add_staff(sessions, (4, 1, "admin"), (5, 1, "lawyer"), (6, 1, "partner"))
 
     created = await client.post("/api/v1/cases", json={
+        "practice_area": "Civil Litigation",
         "title": "Team File",
         "client_id": 1,
         "status": "active",
@@ -88,6 +89,7 @@ async def test_case_team_cross_org_and_unauthorized_changes_create_nothing(workf
 async def test_case_assignment_is_persisted_unread_and_available_as_popup(messaging):
     client, _sessions, actor = messaging
     created = await client.post("/api/v1/cases", json={
+        "practice_area": "Civil Litigation",
         "title": "Notification File",
         "client_id": 1,
         "status": "active",

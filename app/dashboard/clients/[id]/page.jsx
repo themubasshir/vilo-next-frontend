@@ -1,5 +1,7 @@
 "use client";
 
+import DocumentLastEdited from "../../../../components/DocumentLastEdited";
+
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
@@ -241,6 +243,8 @@ export default function ClientDetailPage() {
       id: `doc-${row.id}`,
       documentId: row.id,
       documentCategory: row.category,
+      last_edited_by_name: row.last_edited_by_name,
+      last_edited_at: row.last_edited_at,
       title: row.title || row.file_name || `Document #${row.id}`,
       fileName: row.file_name || row.title || `Document #${row.id}`,
       fileType: row.file_type,
@@ -255,6 +259,8 @@ export default function ClientDetailPage() {
       id: `client-id-${row.id}`,
       documentId: row.id,
       documentCategory: "client_id",
+      last_edited_by_name: row.last_edited_by_name,
+      last_edited_at: row.last_edited_at,
       title: `${labelize(row.client_id_type || "other").replace("Driver Licence", "Driver's License")} · ${row.file_name || row.title || `Document #${row.id}`}`,
       fileName: row.file_name || row.title || `Document #${row.id}`,
       fileType: row.file_type,
@@ -398,7 +404,7 @@ export default function ClientDetailPage() {
     const path = isClientId
       ? `/api/v1/clients/${id}/id-documents/${documentId}/view`
       : `/api/v1/documents/${documentId}/view`;
-    void openPreview({ path, downloadPath, filename, expectedType: getDocumentViewerType({ filename, mediaType }) });
+    void openPreview({ path, downloadPath, filename, document, expectedType: getDocumentViewerType({ filename, mediaType }) });
   }
 
   async function uploadIdDocument(event) {
@@ -588,7 +594,7 @@ export default function ClientDetailPage() {
                     <tbody>
                       {timelineRows.map((row) => (
                         <tr key={row.id}>
-                          <td>{row.title}</td>
+                          <td>{row.title}<DocumentLastEdited document={row} /></td>
                           <td><span className={`vilo-badge vilo-badge--priority-${row.priority}`}>{row.priority}</span></td>
                           <td>{formatDate(row.filing_date)}</td>
                           <td><span className={`vilo-badge vilo-badge--${row.status}`}>{row.status}</span></td>

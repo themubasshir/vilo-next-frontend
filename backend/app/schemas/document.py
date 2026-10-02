@@ -9,6 +9,9 @@ class DocumentResponse(BaseModel):
     case_id: int | None
     client_id: int | None
     uploaded_by: int
+    last_edited_by_user_id: int | None = None
+    last_edited_by_name: str | None = None
+    last_edited_at: datetime | None = None
     title: str
     description: str | None
     file_name: str

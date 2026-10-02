@@ -9,6 +9,8 @@ from app.db.session import get_db
 from app.models.case import Case
 from app.models.client import Client
 from app.models.conversation import Conversation, ConversationParticipant, Message
+from app.models.message_receipt import MessageReceipt
+from app.services.message_receipts import receipt_summary, record_first_read
 from app.models.message_case_reference import MessageCaseReference
 from app.models.enums import UserRole
 from app.models.user import User
@@ -82,6 +84,7 @@ async def build_case_references(db: AsyncSession, org_id: int, message_id: int, 
 async def build_message_response(db: AsyncSession, message: Message, client_id: int) -> MessageResponse:
     sender = await db.scalar(select(User).where(User.id == message.sender_id, User.organization_id == message.organization_id))
     return MessageResponse(
+        **await receipt_summary(db, message),
         id=message.id,
         conversation_id=message.conversation_id,
         sender_id=message.sender_id,
@@ -242,13 +245,17 @@ async def create_portal_message(conversation_id: int, payload: MessageCreate, db
     conv.updated_at = now
     participant_ids = (
         await db.scalars(
-            select(ConversationParticipant.user_id).where(
+            select(ConversationParticipant.user_id).join(User, User.id == ConversationParticipant.user_id).where(
+                User.organization_id == client.organization_id,
                 ConversationParticipant.organization_id == client.organization_id,
                 ConversationParticipant.conversation_id == conversation_id,
                 ConversationParticipant.user_id != current_user.id,
             )
         )
     ).all()
+    db.add_all([MessageReceipt(message_id=msg.id, user_id=uid, delivered_at=now, created_at=now)
+                for uid in set(participant_ids)])
+    await db.flush()
     await bulk_create_notifications(
         db,
         organization_id=client.organization_id,
@@ -264,7 +271,7 @@ async def create_portal_message(conversation_id: int, payload: MessageCreate, db
 
 
 @router.post("/conversations/{conversation_id}/mark-read")
-async def mark_portal_conversation_read(conversation_id: int, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+async def mark_portal_conversation_read(conversation_id: int, read_through: datetime | None = Query(default=None), db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
     client = await get_portal_client(db, current_user)
     await get_allowed_conversation(db, client, conversation_id)
     part = await db.scalar(
@@ -274,7 +281,17 @@ async def mark_portal_conversation_read(conversation_id: int, db: AsyncSession =
             ConversationParticipant.user_id == current_user.id,
         )
     )
-    part.last_read_at = datetime.now(timezone.utc)
+    now = datetime.now(timezone.utc)
+    cutoff = read_through or now
+    if cutoff.tzinfo is None:
+        cutoff = cutoff.replace(tzinfo=timezone.utc)
+    cutoff = min(cutoff, now)
+    previous = part.last_read_at
+    if previous and previous.tzinfo is None:
+        previous = previous.replace(tzinfo=timezone.utc)
+    part.last_read_at = max(previous, cutoff) if previous else cutoff
+    await record_first_read(db, organization_id=client.organization_id, conversation_id=conversation_id,
+                            user_id=current_user.id, cutoff=cutoff, now=now)
     await db.commit()
     return {"ok": True}
 

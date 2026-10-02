@@ -30,6 +30,7 @@ from app.schemas.document import (
     DocumentVersionResponse,
     OnlyOfficeSessionResponse,
 )
+from app.services.document_accountability import record_document_edit
 from app.services.audit import log_audit_event
 from app.services.document_storage import MAX_UPLOAD_BYTES, persist_file, resolve_stored_file, resolved_media_type, safe_original_name
 from app.services.email import build_document_shared_email
@@ -60,6 +61,9 @@ def to_response(document: Document) -> DocumentResponse:
         case_id=document.case_id,
         client_id=document.client_id,
         uploaded_by=document.uploaded_by,
+        last_edited_by_user_id=getattr(document, "last_edited_by_user_id", None),
+        last_edited_by_name=getattr(document, "last_edited_by_name", None),
+        last_edited_at=getattr(document, "last_edited_at", None),
         title=document.title,
         description=document.description,
         file_name=document.file_name,
@@ -260,7 +264,7 @@ def build_onlyoffice_document_key(doc: Document) -> str:
     return digest[:48]
 
 
-def build_internal_document_token(*, document_id: int, organization_id: int, version: int, purpose: str) -> str:
+def build_internal_document_token(*, document_id: int, organization_id: int, version: int, purpose: str, actor_user_id: int | None = None) -> str:
     expires_at = current_utc() + timedelta(minutes=settings.onlyoffice_file_token_expires_minutes)
     payload = {
         "sub": f"document:{document_id}",
@@ -268,6 +272,7 @@ def build_internal_document_token(*, document_id: int, organization_id: int, ver
         "organization_id": organization_id,
         "version": version,
         "purpose": purpose,
+        "actor_user_id": actor_user_id,
         "exp": expires_at,
     }
     return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
@@ -327,7 +332,7 @@ def build_onlyoffice_callback_note(payload: dict[str, Any]) -> str:
     return "Edited in ONLYOFFICE"
 
 
-def get_onlyoffice_actor_user_id(payload: dict[str, Any], fallback_user_id: int) -> int:
+def get_onlyoffice_actor_user_id(payload: dict[str, Any], fallback_user_id: int | None) -> int | None:
     users = payload.get("users")
     if isinstance(users, list) and users:
         try:
@@ -426,6 +431,7 @@ async def upload_document(
         created_at=now,
         updated_at=now,
     )
+    record_document_edit(document, current_user, now)
     db.add(document)
     await db.flush()
     await log_audit_event(
@@ -652,6 +658,7 @@ async def create_onlyoffice_session(
             organization_id=doc.organization_id,
             version=doc.version,
             purpose="onlyoffice_callback",
+            actor_user_id=current_user.id,
         )
         config["editorConfig"]["callbackUrl"] = (
             f"{backend_base_url}/api/v1/documents/{doc.id}/onlyoffice/callback?token={callback_token}"
@@ -738,9 +745,13 @@ async def update_document(
     updates = payload.model_dump(exclude_unset=True)
     if "visibility" in updates and updates["visibility"] not in VALID_VISIBILITY:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid visibility")
+    changed = any(getattr(doc, key) != value for key, value in updates.items())
+    if not changed:
+        return to_response(doc)
     for key, value in updates.items():
         setattr(doc, key, value)
     doc.updated_at = datetime.now(timezone.utc)
+    record_document_edit(doc, current_user, doc.updated_at)
 
     if doc.case_id:
         await create_case_timeline_event(
@@ -816,6 +827,7 @@ async def replace_document(
     doc.version_source = "replace"
     doc.version_note = notes.strip() if notes and notes.strip() else None
     doc.updated_at = now
+    record_document_edit(doc, current_user, now)
 
     await log_audit_event(
         db,
@@ -928,6 +940,7 @@ async def save_document_editable_content(
     doc.version_source = "content_edit"
     doc.version_note = version_note
     doc.updated_at = now
+    record_document_edit(doc, current_user, now)
 
     await log_audit_event(
         db,
@@ -1003,7 +1016,15 @@ async def handle_onlyoffice_callback(
     if current_file_bytes == data:
         return ONLYOFFICE_CALLBACK_SUCCESS
 
-    actor_user_id = get_onlyoffice_actor_user_id(callback_payload, doc.uploaded_by)
+    # For save statuses, the signed callback's users identifies the last editor.
+    # Without Document Server JWT, trust only the VILO-signed session actor.
+    actor_user_id = payload.get("actor_user_id")
+    if settings.onlyoffice_jwt_secret:
+        actor_user_id = get_onlyoffice_actor_user_id(callback_payload, actor_user_id)
+    actor = await db.scalar(select(User).where(User.id == actor_user_id, User.organization_id == doc.organization_id)) if actor_user_id else None
+    if not actor or actor.role.value not in ALLOWED_STAFF or not await get_org_document(db, doc.id, actor):
+        raise HTTPException(status_code=403, detail="ONLYOFFICE editor identity is unavailable or unauthorized")
+    actor_user_id = actor.id
     now = current_utc()
     db.add(archive_current_document_version(doc, actor_user_id, now))
 
@@ -1019,6 +1040,7 @@ async def handle_onlyoffice_callback(
     doc.version_source = "onlyoffice_edit"
     doc.version_note = build_onlyoffice_callback_note(callback_payload)
     doc.updated_at = now
+    record_document_edit(doc, actor, now)
 
     await log_audit_event(
         db,

@@ -21,6 +21,7 @@ from app.api.v1.documents import (
 from app.db.session import get_db
 from app.models.case import Case
 from app.models.document import Document
+from app.services.document_accountability import record_document_edit
 from app.models.precedent import Precedent
 from app.models.practice_area import PracticeArea
 from app.models.user import User
@@ -501,6 +502,7 @@ async def copy_precedent_to_case(
         created_at=now,
         updated_at=now,
     )
+    record_document_edit(document, current_user, now)
     db.add(document)
     await db.flush()
     await notify_case_document_added(db, document=document, actor_id=current_user.id)

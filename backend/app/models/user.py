@@ -29,7 +29,7 @@ class User(Base):
     created_tasks = relationship("Task", foreign_keys="Task.created_by", back_populates="creator")
     created_calendar_events = relationship("CalendarEvent", back_populates="creator")
     timeline_events = relationship("CaseTimelineEvent", back_populates="actor")
-    uploaded_documents = relationship("Document", back_populates="uploader")
+    uploaded_documents = relationship("Document", back_populates="uploader", foreign_keys="Document.uploaded_by")
     case_notes = relationship("CaseNote", back_populates="author")
     client_profile = relationship("Client", back_populates="user", uselist=False)
     submitted_intakes = relationship("ClientIntake", back_populates="submitter")

@@ -81,7 +81,7 @@ def test_invoice_model_declares_exactly_one_recipient_constraint():
 
 
 def test_case_draft_allows_incomplete_fields_and_preserves_expected_date():
-    payload = CaseCreate(status=CaseStatus.draft, expected_completion_date=date(2026, 12, 1))
+    payload = CaseCreate(practice_area="Other", status=CaseStatus.draft, expected_completion_date=date(2026, 12, 1))
     assert payload.title is None
     assert payload.client_id is None
     assert payload.expected_completion_date == date(2026, 12, 1)
@@ -93,7 +93,7 @@ def test_active_case_requires_title_and_client():
 
 
 def test_complete_active_case_is_allowed():
-    payload = CaseCreate(status=CaseStatus.active, title="Estate matter", client_id=7)
+    payload = CaseCreate(practice_area="Probate & Estate", status=CaseStatus.active, title="Estate matter", client_id=7)
     assert payload.status == CaseStatus.active
 
 

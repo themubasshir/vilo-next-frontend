@@ -2,6 +2,7 @@ from datetime import date, datetime
 from pydantic import BaseModel, Field, model_validator
 
 from app.models.case import CasePriority, CaseStatus
+from app.schemas.case_practice_area import CasePracticeArea
 
 
 class CaseAssignmentRequest(BaseModel):
@@ -17,6 +18,7 @@ class AssignedUser(BaseModel):
 
 
 class CaseCreate(BaseModel):
+    practice_area: CasePracticeArea
     title: str | None = None
     description: str | None = None
     client_id: int | None = None
@@ -36,6 +38,7 @@ class CaseCreate(BaseModel):
 
 
 class CaseUpdate(BaseModel):
+    practice_area: CasePracticeArea | None = None
     title: str | None = None
     description: str | None = None
     client_id: int | None = None
@@ -46,6 +49,7 @@ class CaseUpdate(BaseModel):
 
 
 class CaseResponse(BaseModel):
+    practice_area: str | None = None
     id: int
     organization_id: int
     title: str | None

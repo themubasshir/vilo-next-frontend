@@ -692,6 +692,8 @@ async def test_onlyoffice_callback_save_creates_new_version_and_preserves_origin
     async def scalar_side_effect(query, *args, **kwargs):
         if "documents.id" in str(query):
             return doc
+        if "users.id" in str(query):
+            return SimpleNamespace(id=10, organization_id=1, name="Daniel Brooks", email="daniel@example.test", role=UserRole.lawyer)
         return None
 
     db.scalar = scalar_side_effect  # type: ignore[assignment]
@@ -730,6 +732,7 @@ async def test_onlyoffice_callback_save_creates_new_version_and_preserves_origin
         organization_id=1,
         version=1,
         purpose="onlyoffice_callback",
+        actor_user_id=10,
     )
     key = documents_module.build_onlyoffice_document_key(doc)
     client = build_db_client(db)
@@ -740,6 +743,9 @@ async def test_onlyoffice_callback_save_creates_new_version_and_preserves_origin
         )
         assert res.status_code == 200
         assert res.json() == {"error": 0}
+        assert doc.last_edited_by_user_id == 10
+        assert doc.last_edited_by_name == "Daniel Brooks"
+        assert doc.last_edited_at is not None
         assert doc.version == 2
         assert doc.version_source == "onlyoffice_edit"
         assert doc.version_note == "Edited in ONLYOFFICE by 10"

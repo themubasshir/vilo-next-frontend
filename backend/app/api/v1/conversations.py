@@ -12,6 +12,7 @@ from app.db.session import get_db
 from app.models.case import Case
 from app.models.client import Client
 from app.models.conversation import Conversation, ConversationParticipant, Message
+from app.models.message_receipt import MessageReceipt
 from app.models.message_attachment import MessageAttachment
 from app.models.message_case_reference import MessageCaseReference
 from app.models.notification import Notification
@@ -30,6 +31,7 @@ from app.schemas.conversation import (
     ParticipantCreate,
     ParticipantResponse,
 )
+from app.services.message_receipts import receipt_summary, record_first_read
 from app.services import message_attachments
 from app.services.document_storage import persist_file, resolve_stored_file, resolved_media_type
 from app.services.notifications import bulk_create_notifications
@@ -112,6 +114,7 @@ async def build_message_response(db: AsyncSession, message: Message, attachments
     if sender and getattr(sender, "role", None) is not None:
         sender_role = sender.role.value if hasattr(sender.role, "value") else str(sender.role)
     return MessageResponse(
+        **await receipt_summary(db, message),
         id=message.id,
         conversation_id=message.conversation_id,
         sender_id=message.sender_id,
@@ -449,6 +452,9 @@ async def create_message_core(conversation_id: int, payload: MessageCreate, db: 
             )
         )
     ).all()
+    db.add_all([MessageReceipt(message_id=msg.id, user_id=uid, delivered_at=now, read_at=None, created_at=now)
+                for uid in set(participant_ids)])
+    await db.flush()
     await bulk_create_notifications(
         db,
         organization_id=current_user.organization_id,
@@ -604,6 +610,8 @@ async def mark_conversation_read(conversation_id: int, read_through: datetime | 
         Message.conversation_id == conversation_id,
         Message.created_at <= cutoff,
     ))).all())
+    await record_first_read(db, organization_id=current_user.organization_id, conversation_id=conversation_id,
+                            user_id=current_user.id, cutoff=cutoff, now=now)
     unread_message_notifications = (await db.scalars(select(Notification).where(
         Notification.organization_id == current_user.organization_id,
         Notification.user_id == current_user.id,

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import DocumentLastEdited from "./DocumentLastEdited";
 import { apiDownload, apiView } from "../lib/api";
 
 const CLOSED_PREVIEW = {
@@ -53,7 +54,7 @@ export function useProtectedFilePreview() {
     setPreview(CLOSED_PREVIEW);
   }, [releaseObjectUrl]);
 
-  const openPreview = useCallback(async ({ path, downloadPath = "", filename = "File preview", expectedType = "" }) => {
+  const openPreview = useCallback(async ({ path, downloadPath = "", filename = "File preview", expectedType = "", document: documentMetadata = null }) => {
     if (requestRef.current.path === path && (requestRef.current.controller || loadedPathRef.current === path)) return;
     requestRef.current.controller?.abort();
     releaseObjectUrl();
@@ -66,8 +67,9 @@ export function useProtectedFilePreview() {
       open: true,
       loading: true,
       filename,
+      document: documentMetadata,
       downloadPath,
-      retry: () => openPreview({ path, downloadPath, filename, expectedType }),
+      retry: () => openPreview({ path, downloadPath, filename, expectedType, document: documentMetadata }),
       openInNewTab: () => openProtectedPathInNewTab({ path, filename }),
     });
 
@@ -90,8 +92,9 @@ export function useProtectedFilePreview() {
         previewType: result.previewType,
         textContent: result.textContent,
         downloadPath,
+        document: documentMetadata,
         error: "",
-        retry: () => openPreview({ path, downloadPath, filename, expectedType }),
+        retry: () => openPreview({ path, downloadPath, filename, expectedType, document: documentMetadata }),
         openInNewTab: () => openProtectedPathInNewTab({ path, filename }),
       });
     } catch (error) {
@@ -107,8 +110,9 @@ export function useProtectedFilePreview() {
         open: true,
         filename,
         downloadPath,
+        document: documentMetadata,
         error: message,
-        retry: () => openPreview({ path, downloadPath, filename, expectedType }),
+        retry: () => openPreview({ path, downloadPath, filename, expectedType, document: documentMetadata }),
         openInNewTab: () => openProtectedPathInNewTab({ path, filename }),
       });
     }
@@ -211,6 +215,7 @@ export default function ProtectedFilePreviewModal({ preview, onClose }) {
         </div>
 
         <div className="vilo-modal__body protected-file-preview-body">
+          <DocumentLastEdited document={preview.document} />
           {preview.loading ? (
             <div className="protected-file-preview-loading" role="status" aria-live="polite">
               <span className="protected-file-preview-spinner" aria-hidden="true" />

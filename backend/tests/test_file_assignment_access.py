@@ -13,7 +13,7 @@ from app.models.user import User
 @pytest.mark.asyncio
 async def test_assignment_only_access_and_removal(workflow):
     client, sessions, actor = workflow
-    response = await client.post('/api/v1/cases', json={'title': 'Assigned File', 'client_id': 1, 'status': 'active', 'assigned_user_ids': [3]})
+    response = await client.post('/api/v1/cases', json={'practice_area': 'Civil Litigation', 'title': 'Assigned File', 'client_id': 1, 'status': 'active', 'assigned_user_ids': [3]})
     assert response.status_code == 200, response.text
     cid = response.json()['id']
     async with sessions() as db:

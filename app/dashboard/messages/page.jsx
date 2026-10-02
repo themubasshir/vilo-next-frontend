@@ -422,7 +422,7 @@ function MessagesPageContent() {
         pollInFlight.current = false;
       }
     };
-    const interval = window.setInterval(() => refresh(), 25_000);
+    const interval = window.setInterval(() => refresh(true), 25_000);
     const onVisible = () => { if (document.visibilityState === "visible") refresh(true); };
     document.addEventListener("visibilitychange", onVisible);
     return () => { stopped = true; window.clearInterval(interval); document.removeEventListener("visibilitychange", onVisible); };
@@ -918,7 +918,8 @@ function MessagesPageContent() {
                                 ))}
                               </div>
                             ) : null}
-                            <span className="message-bubble__time">{formatBubbleTime(msg.created_at)}</span>
+                            <span className="message-bubble__time">{formatBubbleTime(msg.created_at)}{mine ? <span className={`message-receipt${msg.delivery_status === "read" ? " is-read" : ""}`} role="img" aria-label={msg.delivery_status === "read" ? `Read at ${formatBubbleTime(msg.read_at)}` : msg.delivery_status === "delivered" ? "Delivered" : "Sent"}>{msg.delivery_status === "read" || msg.delivery_status === "delivered" ? "✓✓" : "✓"}</span> : null}</span>
+                            {mine && msg.delivery_status === "read" && msg.read_at ? <small className="message-read-time">Read {formatBubbleTime(msg.read_at)}</small> : null}
                           </div>
                           {mine ? <span className={`message-bubble-row__avatar is-mine${startsGroup ? "" : " is-placeholder"}`} aria-hidden={!startsGroup}>{startsGroup ? getInitials(senderName) : ""}</span> : null}
                         </div>

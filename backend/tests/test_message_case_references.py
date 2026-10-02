@@ -47,6 +47,10 @@ class MsgDBStub:
 
         return _Rows(rows)
 
+    def add_all(self, objects):
+        for obj in objects:
+            self.add(obj)
+
     def add(self, obj):
         self.added.append(obj)
 

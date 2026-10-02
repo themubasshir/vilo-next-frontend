@@ -12,6 +12,7 @@ import ViloDateInput from "../../../components/ViloDateInput";
 
 const initialForm = {
   title: "",
+  practice_area: "",
   description: "",
   client_id: "",
   status: "active",
@@ -34,6 +35,8 @@ function CasesPageContent() {
   const titleInputRef = useRef(null);
   const [draftCaseId, setDraftCaseId] = useState(null);
   const [cases, setCases] = useState([]);
+  const [practiceAreas, setPracticeAreas] = useState([]);
+  const [priorityFilter, setPriorityFilter] = useState(searchParams.get("priority") || "");
   const [clients, setClients] = useState([]);
   const [team, setTeam] = useState([]);
   const [form, setForm] = useState(initialForm);
@@ -64,6 +67,7 @@ function CasesPageContent() {
     setError("");
     try {
       const params = new URLSearchParams({ page: String(page), per_page: String(perPage), status: statusFilter });
+      if (priorityFilter) params.set("priority", priorityFilter);
       if (staffFilter) params.set("assigned_user_id", staffFilter);
       if (clientFilter) params.set("client_id", clientFilter);
       if (createdFrom) params.set("created_from", createdFrom);
@@ -82,8 +86,9 @@ function CasesPageContent() {
   }
 
   useEffect(() => {
-    Promise.all([apiRequest("/api/v1/clients"), apiRequest("/api/v1/team")])
-      .then(([clientData, teamData]) => {
+    Promise.all([apiRequest("/api/v1/clients"), apiRequest("/api/v1/team"), apiRequest("/api/v1/cases/practice-areas")])
+      .then(([clientData, teamData, practiceAreaData]) => {
+        setPracticeAreas(practiceAreaData || []);
         setClients(clientData || []);
         setTeam((teamData || []).filter((u) => u.role !== "client"));
       })
@@ -98,10 +103,10 @@ function CasesPageContent() {
   useEffect(() => {
     loadCases();
     const params = new URLSearchParams(searchParams.toString());
-    [["status", statusFilter], ["assigned_user_id", staffFilter], ["client_id", clientFilter], ["created_from", createdFrom], ["created_to", createdTo], ["search", search]].forEach(([key, value]) => value ? params.set(key, value) : params.delete(key));
+    [["priority", priorityFilter], ["status", statusFilter], ["assigned_user_id", staffFilter], ["client_id", clientFilter], ["created_from", createdFrom], ["created_to", createdTo], ["search", search]].forEach(([key, value]) => value ? params.set(key, value) : params.delete(key));
     page > 1 ? params.set("page", String(page)) : params.delete("page");
     router.replace(`/dashboard/cases${params.toString() ? `?${params.toString()}` : ""}`, { scroll: false });
-  }, [clientFilter, createdFrom, createdTo, page, perPage, search, staffFilter, statusFilter]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [clientFilter, createdFrom, createdTo, page, perPage, priorityFilter, search, staffFilter, statusFilter]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function changeFilter(setter, value) {
     setPage(1);
@@ -109,6 +114,7 @@ function CasesPageContent() {
   }
 
   function clearFilters() {
+    setPriorityFilter("");
     setStatusFilter("all");
     setStaffFilter("");
     setClientFilter("");
@@ -202,6 +208,7 @@ function CasesPageContent() {
     setDraftCaseId(caseRow.id);
     setForm({
       title: caseRow.title || "",
+      practice_area: caseRow.practice_area || "",
       description: caseRow.description || "",
       client_id: caseRow.client_id ? String(caseRow.client_id) : "",
       status: "draft",
@@ -233,6 +240,7 @@ function CasesPageContent() {
         method: "PATCH",
         body: JSON.stringify({
           title: editCase.title,
+          ...(editCase.practice_area ? { practice_area: editCase.practice_area } : {}),
           description: editCase.description || "",
           status: editCase.status,
           priority: editCase.priority,
@@ -330,7 +338,8 @@ function CasesPageContent() {
               <button type="button" className="vilo-btn vilo-btn--ghost vilo-btn--xs" onClick={createCloseGuard.requestClose}>Close</button>
             </div>
             <form className="vilo-modal__body vilo-form-grid" onSubmit={createCase}>
-              <div><label>Case Title *</label><input ref={titleInputRef} placeholder="Case title" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} required /></div>
+              <div><label>Case/File Title *</label><input ref={titleInputRef} placeholder="Case title" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} required /></div>
+              <label>Practice Area *<select value={form.practice_area} onChange={(e) => setForm({ ...form, practice_area: e.target.value })} required><option value="">Select Practice Area</option>{practiceAreas.map((area) => <option key={area} value={area}>{area}</option>)}</select></label>
               <div><label>Description</label><textarea placeholder="Description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></div>
               <div className="vilo-form-row-two">
                 <div><label>Client *</label><select value={form.client_id} onChange={(e) => setForm({ ...form, client_id: e.target.value })} required><option value="">Select client</option>{clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
@@ -367,6 +376,7 @@ function CasesPageContent() {
         </div>
         <div className="cases-filter-grid">
           <label><span>Search</span><input type="search" value={searchDraft} onChange={(event) => changeFilter(setSearchDraft, event.target.value)} placeholder="Name, number, or client" /></label>
+          <label><span>Priority</span><select value={priorityFilter} onChange={(event) => changeFilter(setPriorityFilter, event.target.value)}><option value="">All priorities</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select></label>
           <label><span>Assigned staff</span><select value={staffFilter} onChange={(event) => changeFilter(setStaffFilter, event.target.value)}><option value="">All staff</option>{team.map((member) => <option key={member.id} value={member.id}>{member.name}</option>)}</select></label>
           <label><span>Client</span><select value={clientFilter} onChange={(event) => changeFilter(setClientFilter, event.target.value)}><option value="">All clients</option>{clients.map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}</select></label>
           <label><span>Created from</span><ViloDateInput value={createdFrom} onChange={(value) => changeFilter(setCreatedFrom, value)} /></label>
@@ -385,7 +395,7 @@ function CasesPageContent() {
                 <tr>
                   <th className="case-title-cell">Title</th>
                   <th className="case-badge-cell">Status</th>
-                  <th className="case-badge-cell">Priority</th>
+                  <th>Practice Area</th>
                   <th className="case-client-cell">Client</th>
                   <th className="case-assignee-cell">Team Members</th>
                   <th className="case-action-cell">Actions</th>
@@ -396,7 +406,7 @@ function CasesPageContent() {
                   <tr key={c.id} className="cases-row-link" onClick={() => { if (menuOpenId !== c.id) router.push(`/dashboard/cases/${c.id}`); }}>
                     <td className="case-title-cell"><Link href={`/dashboard/cases/${c.id}`} className="cases-title-link">{c.title || "Untitled draft"}</Link></td>
                     <td className="case-badge-cell"><span className={`vilo-badge vilo-badge--${c.status}`}>{c.status}</span></td>
-                    <td className="case-badge-cell"><span className={`vilo-badge vilo-badge--priority-${c.priority}`}>{c.priority}</span></td>
+                    <td>{c.practice_area || "—"}</td>
                     <td className="case-client-cell">{c.client_name || `#${c.client_id}`}</td>
                     <td className="case-assignee-cell"><CaseTeamMembers users={c.assigned_users} /></td>
                     <td className="case-action-cell" onClick={(e) => e.stopPropagation()}>
@@ -447,7 +457,8 @@ function CasesPageContent() {
             </div>
             <div className="vilo-modal__body">
               <form className="vilo-form-grid" onSubmit={updateCase}>
-                <input value={editCase.title || ""} onChange={(e) => setEditCase((p) => ({ ...p, title: e.target.value }))} required />
+                <label>Case/File Title<input value={editCase.title || ""} onChange={(e) => setEditCase((p) => ({ ...p, title: e.target.value }))} required /></label>
+                <label>Practice Area<select value={editCase.practice_area || ""} onChange={(e) => setEditCase((p) => ({ ...p, practice_area: e.target.value }))}><option value="" disabled>Not specified</option>{practiceAreas.map((area) => <option key={area} value={area}>{area}</option>)}</select></label>
                 <textarea value={editCase.description || ""} onChange={(e) => setEditCase((p) => ({ ...p, description: e.target.value }))} />
                 <div className="vilo-form-row-two">
                   <select value={editCase.status} onChange={(e) => setEditCase((p) => ({ ...p, status: e.target.value }))}>

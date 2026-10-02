@@ -150,6 +150,8 @@ async def test_copy_download_edit_callback_and_versions(workflow, monkeypatch, k
     assert doc["title"] == "../../Affidavit.docx"
     assert doc["case_id"] == doc["client_id"] == doc["organization_id"] == 1
     assert doc["uploaded_by"] == 1 and doc["version"] == 1
+    assert doc["last_edited_by_user_id"] == 1 and doc["last_edited_by_name"] == "Staff 1"
+    assert doc["last_edited_at"] is not None
     assert doc["category"] == "precedent" and doc["visibility"] == "internal"
     assert doc["file_type"] == documents.DOCX_MIME_TYPE
     assert doc["file_name"].endswith(".docx") and "/" not in doc["file_name"]
@@ -200,6 +202,8 @@ async def test_copy_download_edit_callback_and_versions(workflow, monkeypatch, k
     assert updated["version"] == 2 and updated["version_source"] == "onlyoffice_edit"
     assert updated["file_name"] == doc["file_name"]
     assert updated["updated_at"] != doc["updated_at"]
+    assert updated["last_edited_by_user_id"] == 1
+    assert updated["last_edited_at"] != doc["last_edited_at"]
     assert_word((await client.get(f"/api/v1/documents/{document_id}/download")).content, "Saved for review\nSecond paragraph")
     history = (await client.get(f"/api/v1/documents/{document_id}/versions")).json()
     assert len(history) == 1 and history[0]["version_number"] == 1

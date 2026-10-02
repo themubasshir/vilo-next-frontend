@@ -16,7 +16,7 @@ from app.schemas.client import ClientCreate
 
 
 def user(*, user_id=7, organization_id=11, role=UserRole.paralegal):
-    return SimpleNamespace(id=user_id, organization_id=organization_id, role=role)
+    return SimpleNamespace(id=user_id, organization_id=organization_id, role=role, name="Asha Staff", email="asha@example.test")
 
 
 def upload(name="identity.pdf", content=b"%PDF identity", content_type="application/pdf"):

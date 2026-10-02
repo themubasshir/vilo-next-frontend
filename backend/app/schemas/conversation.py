@@ -54,6 +54,10 @@ class MessageResponse(BaseModel):
     attachments: list[MessageAttachmentResponse] = Field(default_factory=list)
     sender_name: str | None = None
     sender_role: str | None = None
+    delivery_status: str = "sent"
+    read_at: datetime | None = None
+    recipient_count: int = 0
+    read_count: int = 0
     case_references: list["CaseReferenceResponse"] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime

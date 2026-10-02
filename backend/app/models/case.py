@@ -31,6 +31,7 @@ class Case(Base):
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     organization_id: Mapped[int] = mapped_column(ForeignKey("organizations.id", ondelete="CASCADE"), index=True, nullable=False)
     title: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    practice_area: Mapped[str | None] = mapped_column(String(100), nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     client_id: Mapped[int | None] = mapped_column(ForeignKey("clients.id", ondelete="RESTRICT"), index=True, nullable=True)
     expected_completion_date: Mapped[date | None] = mapped_column(Date, nullable=True)

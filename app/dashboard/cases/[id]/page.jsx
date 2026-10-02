@@ -1,5 +1,7 @@
 "use client";
 
+import DocumentLastEdited from "../../../../components/DocumentLastEdited";
+
 import CaseTeamMembers from "../../../../components/dashboard/CaseTeamMembers";
 import CaseTeamPicker from "../../../../components/dashboard/CaseTeamPicker";
 
@@ -421,7 +423,7 @@ export default function CaseDetailPage() {
       setWordTarget({ document: doc, mode: "view" });
       return;
     }
-    void openPreview({ path: `/api/v1/documents/${doc.id}/view`, downloadPath: `/api/v1/documents/${doc.id}/download`, filename: doc.file_name, expectedType: viewerType });
+    void openPreview({ path: `/api/v1/documents/${doc.id}/view`, downloadPath: `/api/v1/documents/${doc.id}/download`, filename: doc.file_name, document: doc, expectedType: viewerType });
   }
 
   async function closeWordDocument() {
@@ -515,7 +517,8 @@ export default function CaseDetailPage() {
           <article className="dashboard-card case-summary-card">
             <div className="case-summary-grid">
               <div className="case-summary-box"><span>Client:</span><strong>{clientName}</strong></div>
-              <div className="case-summary-box"><span>Case Type:</span><strong>{item.title || "-"}</strong></div>
+              <div className="case-summary-box"><span>Case/File Title:</span><strong>{item.title || "-"}</strong></div>
+              <div className="case-summary-box"><span>Practice Area:</span><strong>{item.practice_area || "—"}</strong></div>
               <div className="case-summary-box"><span>Filling Date:</span><strong>{fmtDate(item.created_at)}</strong></div>
               <div className="case-summary-box"><span>Status:</span><strong><span className={`vilo-badge vilo-badge--${item.status}`}>{item.status}</span></strong></div>
               <div className="case-summary-box"><span>Priority:</span><strong><span className={`vilo-badge vilo-badge--priority-${item.priority}`}>{item.priority}</span></strong></div>
@@ -698,7 +701,7 @@ export default function CaseDetailPage() {
                           const editMode = getDocumentEditMode({ filename: doc.file_name, mediaType: doc.file_type });
                           return (
                           <tr key={doc.id}>
-                            <td>{doc.title}</td><td>{doc.file_name}</td><td>{doc.category || "-"}</td>
+                            <td>{doc.title}<DocumentLastEdited document={doc} /></td><td>{doc.file_name}</td><td>{doc.category || "-"}</td>
                             <td><span className={`vilo-badge ${doc.visibility === "client_visible" ? "vilo-badge--active" : "vilo-badge--draft"}`}>{doc.visibility}</span></td>
                             <td>
                               <div className="vilo-table-actions">

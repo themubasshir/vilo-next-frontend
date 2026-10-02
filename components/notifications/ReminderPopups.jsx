@@ -21,6 +21,7 @@ function formatSchedule(metadata) {
 function reminderLink(notification) {
   const metadata = notification.metadata || {};
   if (notification.type === "message_received" && metadata.conversation_id) return `/dashboard/messages?conversation=${encodeURIComponent(metadata.conversation_id)}`;
+  if (metadata.document_id) return `/dashboard/documents?document_id=${encodeURIComponent(metadata.document_id)}`;
   if (metadata.link) return metadata.link;
   if (metadata.task_id) return `/dashboard/tasks/${metadata.task_id}`;
   if (metadata.calendar_event_id) return `/dashboard/calendar?event_id=${metadata.calendar_event_id}`;

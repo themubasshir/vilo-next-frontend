@@ -9,6 +9,8 @@ import ProtectedFilePreviewModal, { useProtectedFilePreview } from "../../../com
 import OnlyOfficeDocumentModal from "../../../components/OnlyOfficeDocumentModal";
 import { getDocumentEditMode, getDocumentViewerType } from "../../../lib/documentViewer";
 import { formatViloDate, formatViloDateTime } from "../../../lib/dateFormat";
+import DocumentActionsMenu from "../../../components/DocumentActionsMenu";
+import DocumentLastEdited from "../../../components/DocumentLastEdited";
 import ViloDateInput from "../../../components/ViloDateInput";
 
 const initialForm = {
@@ -128,7 +130,12 @@ function DocumentsPageContent() {
       if (filterType) params.set("file_type", filterType);
       if (filterFrom) params.set("created_from", filterFrom);
       if (filterTo) params.set("created_to", filterTo);
-      if (requestedDocumentId) params.set("document_id", requestedDocumentId);
+      if (requestedDocumentId) {
+        // An exact notification link takes precedence over a previous list filter/page.
+        ["search", "category", "uploaded_by", "case_id", "client_id", "visibility", "file_type", "created_from", "created_to"].forEach((key) => params.delete(key));
+        params.set("document_id", requestedDocumentId);
+        params.set("page", "1");
+      }
       const [docs, caseData, clientData, teamData] = await Promise.all([
         apiRequest(`/api/v1/documents/query?${params.toString()}`),
         apiRequest("/api/v1/cases"),
@@ -158,6 +165,14 @@ function DocumentsPageContent() {
   }, [activeFolder, activeTab, filterCase, filterCategory, filterClient, filterFrom, filterTo, filterType, filterUploader, filterVisibility, page, perPage, requestedDocumentId, searchQuery, sortBy]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
+    if (!requestedDocumentId) return;
+    setDraftSearch(""); setSearchQuery(""); setActiveFolder("all"); setActiveTab("all");
+    setFilterCategory(""); setFilterCase(""); setFilterClient(""); setFilterUploader("");
+    setFilterVisibility(""); setFilterType(""); setFilterFrom(""); setFilterTo(""); setPage(1);
+    setMenuOpenId(null);
+  }, [requestedDocumentId]);
+
+  useEffect(() => {
     const timer = window.setTimeout(() => setSearchQuery(draftSearch), 300);
     return () => window.clearTimeout(timer);
   }, [draftSearch]);
@@ -175,17 +190,6 @@ function DocumentsPageContent() {
   useEffect(() => {
     setMenuOpenId(null);
   }, [page, perPage, searchQuery, activeFolder, activeTab, sortBy]);
-
-  useEffect(() => {
-    function handlePointerDown(event) {
-      if (!menuOpenId) return;
-      if (event.target instanceof Element && event.target.closest(".case-row-actions")) return;
-      setMenuOpenId(null);
-    }
-
-    document.addEventListener("pointerdown", handlePointerDown);
-    return () => document.removeEventListener("pointerdown", handlePointerDown);
-  }, [menuOpenId]);
 
   useEffect(() => {
     setPage(1);
@@ -505,6 +509,7 @@ function DocumentsPageContent() {
       path: `/api/v1/documents/${document.id}/view`,
       downloadPath: `/api/v1/documents/${document.id}/download`,
       filename: document.file_name || document.title || `Document #${document.id}`,
+      document,
       expectedType: viewerType,
     });
   }
@@ -677,6 +682,7 @@ function DocumentsPageContent() {
                               <div className="documents-table__name">
                                 <span className="documents-table__name-title">{document.title || document.file_name || `Document #${document.id}`}</span>
                                 <span className="documents-table__name-meta">{document.file_name}</span>
+                                <DocumentLastEdited document={document} />
                               </div>
                             </td>
                             <td>
@@ -689,26 +695,16 @@ function DocumentsPageContent() {
                             <td>{formatRelativeDate(document.updated_at || document.created_at)}</td>
                             <td>
                               <div className="vilo-table-actions case-row-actions">
-                                <button
-                                  type="button"
-                                  className="vilo-btn vilo-btn--ghost vilo-btn--xs documents-actions__trigger"
-                                  aria-expanded={menuOpenId === document.id}
-                                  onClick={() => setMenuOpenId((openId) => (openId === document.id ? null : document.id))}
-                                >
-                                  Actions
-                                </button>
-                                {menuOpenId === document.id ? (
-                                  <div className="case-actions-menu documents-actions-menu">
-                                    <button type="button" onClick={() => viewDocument(document)}>View</button>
-                                    <button type="button" onClick={() => apiDownload(`/api/v1/documents/${document.id}/download`).catch((err) => setError(err.message || "Download failed"))}>Download</button>
+                                <DocumentActionsMenu open={menuOpenId === document.id} onToggle={() => setMenuOpenId((openId) => openId === document.id ? null : document.id)} onClose={() => setMenuOpenId(null)} label={`Actions for ${document.title || document.file_name}`}>
+                                    <button role="menuitem" type="button" onClick={() => viewDocument(document)}>View</button>
+                                    <button role="menuitem" type="button" onClick={() => apiDownload(`/api/v1/documents/${document.id}/download`).catch((err) => setError(err.message || "Download failed"))}>Download</button>
                                     {editMode ? (
-                                      <button type="button" onClick={() => editMode === "onlyoffice" ? openOnlyOfficeModal(document, "edit") : openEditModal(document)}>Edit</button>
+                                      <button role="menuitem" type="button" onClick={() => editMode === "onlyoffice" ? openOnlyOfficeModal(document, "edit") : openEditModal(document)}>Edit</button>
                                     ) : null}
-                                    <button type="button" onClick={() => openReplaceModal(document)}>Replace</button>
-                                    <button type="button" onClick={() => openVersions(document)}>Versions</button>
-                                    <button type="button" className="is-danger" onClick={() => deleteDocument(document.id)}>Delete</button>
-                                  </div>
-                                ) : null}
+                                    <button role="menuitem" type="button" onClick={() => openReplaceModal(document)}>Replace</button>
+                                    <button role="menuitem" type="button" onClick={() => openVersions(document)}>Versions</button>
+                                    <button role="menuitem" type="button" className="is-danger" onClick={() => deleteDocument(document.id)}>Delete</button>
+                                </DocumentActionsMenu>
                               </div>
                             </td>
                           </tr>
@@ -960,6 +956,7 @@ function DocumentsPageContent() {
               </div>
               <div className="documents-version-current__meta">
                 <span>Saved {formatViloDateTime(versionTarget.updated_at || versionTarget.created_at)}</span>
+                <DocumentLastEdited document={versionTarget} />
                 <span>{versionTarget.version_note || "No version note."}</span>
               </div>
               {!versions.length ? <p className="vilo-state">No previous versions.</p> : null}

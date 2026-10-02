@@ -17,6 +17,7 @@ from app.models.client_intake_draft import ClientIntakeDraft
 from app.models.client_intake_draft_attachment import ClientIntakeDraftAttachment
 from app.models.case import Case, CaseAssignment
 from app.models.document import Document
+from app.services.document_accountability import record_document_edit
 from app.models.enums import UserRole
 from app.models.user import User
 from app.schemas.document import DocumentResponse
@@ -128,6 +129,9 @@ def to_document_response(document: Document) -> DocumentResponse:
         case_id=document.case_id,
         client_id=document.client_id,
         uploaded_by=document.uploaded_by,
+        last_edited_by_user_id=getattr(document, "last_edited_by_user_id", None),
+        last_edited_by_name=getattr(document, "last_edited_by_name", None),
+        last_edited_at=getattr(document, "last_edited_at", None),
         title=document.title,
         description=document.description,
         file_name=document.file_name,
@@ -564,7 +568,7 @@ async def complete_intake_draft(
                 draft.attachment.file_name,
                 temporary_path.read_bytes(),
             )
-            db.add(Document(
+            document = Document(
                 organization_id=current_user.organization_id,
                 client_id=client.id,
                 case_id=None,
@@ -581,7 +585,9 @@ async def complete_intake_draft(
                 version_source="upload",
                 created_at=now,
                 updated_at=now,
-            ))
+            )
+            record_document_edit(document, current_user, now)
+            db.add(document)
         await db.delete(draft)
         await db.commit()
     except Exception:
@@ -695,6 +701,7 @@ async def upload_client_id_document(
         created_at=now,
         updated_at=now,
     )
+    record_document_edit(document, current_user, now)
     db.add(document)
     await db.flush()
     await log_audit_event(

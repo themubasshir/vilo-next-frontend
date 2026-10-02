@@ -112,24 +112,33 @@ export default function PortalMessagesPage() {
   const [sendError, setSendError] = useState("");
   const [meId, setMeId] = useState(null);
   const threadEndRef = useRef(null);
+  const selectedRef = useRef(null);
+  const threadRequest = useRef(false);
+  selectedRef.current = selected;
 
   async function loadConversations() {
     const rows = await apiRequest("/api/v1/portal/messages/conversations");
     setConversations(rows || []);
     setSelected((prev) => {
-      if (prev) return (rows || []).find((r) => r.id === prev.id) || ((rows || [])[0] || null);
-      return (rows || [])[0] || null;
+      return prev ? (rows || []).find((r) => r.id === prev.id) || null : null;
     });
   }
 
-  async function loadMessages(conversationId) {
-    setMessagesLoading(true);
+  async function loadMessages(conversationId, background = false) {
+    if (background && threadRequest.current) return;
+    threadRequest.current = true;
+    if (!background) setMessagesLoading(true);
     try {
       const rows = await apiRequest(`/api/v1/portal/messages/conversations/${conversationId}/messages`);
-      setMessages(rows || []);
-      await apiRequest(`/api/v1/portal/messages/conversations/${conversationId}/mark-read`, { method: "POST" });
+      if (selectedRef.current?.id !== conversationId) return;
+      setMessages((previous) => JSON.stringify(previous) === JSON.stringify(rows || []) ? previous : rows || []);
+      const latest = rows?.[rows.length - 1];
+      if (latest && document.visibilityState === "visible") {
+        await apiRequest(`/api/v1/portal/messages/conversations/${conversationId}/mark-read?read_through=${encodeURIComponent(latest.created_at)}`, { method: "POST" });
+      }
     } finally {
-      setMessagesLoading(false);
+      threadRequest.current = false;
+      if (selectedRef.current?.id === conversationId) setMessagesLoading(false);
     }
   }
 
@@ -144,6 +153,21 @@ export default function PortalMessagesPage() {
     if (!selected?.id) return;
     loadMessages(selected.id).catch((err) => setError(err.message || "Failed to load messages"));
   }, [selected?.id]);
+
+  useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState !== "visible") return;
+      const activeId = selectedRef.current?.id;
+      if (activeId) loadMessages(activeId, true).catch((err) => setError(err.message || "Failed to refresh messages"));
+    };
+    const interval = window.setInterval(refresh, 25_000);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", refresh);
+      selectedRef.current = null;
+    };
+  }, []);
 
   useEffect(() => {
     threadEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -301,7 +325,8 @@ export default function PortalMessagesPage() {
                                 ))}
                               </div>
                             ) : null}
-                            <span className="message-bubble__time">{formatBubbleTime(msg.created_at)}</span>
+                            <span className="message-bubble__time">{formatBubbleTime(msg.created_at)}{mine ? <span className={`message-receipt${msg.delivery_status === "read" ? " is-read" : ""}`} role="img" aria-label={msg.delivery_status === "read" ? `Read at ${formatBubbleTime(msg.read_at)}` : msg.delivery_status === "delivered" ? "Delivered" : "Sent"}>{msg.delivery_status === "read" || msg.delivery_status === "delivered" ? "✓✓" : "✓"}</span> : null}</span>
+                            {mine && msg.delivery_status === "read" && msg.read_at ? <small className="message-read-time">Read {formatBubbleTime(msg.read_at)}</small> : null}
                           </div>
                         </div>
                       </div>

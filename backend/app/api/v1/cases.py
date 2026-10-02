@@ -6,7 +6,8 @@ from sqlalchemy.orm import selectinload
 
 from app.api.deps import role_guard
 from app.db.session import get_db
-from app.models.case import Case, CaseAssignment
+from app.schemas.case_practice_area import CasePracticeArea
+from app.models.case import Case, CaseAssignment, CasePriority
 from app.models.case_timeline_event import CaseTimelineEvent
 from app.models.client import Client
 from app.models.enums import UserRole
@@ -62,6 +63,7 @@ def serialize_case(case: Case) -> CaseResponse:
         client_id=case.client_id,
         status=case.status.value,
         priority=case.priority.value,
+        practice_area=getattr(case, "practice_area", None),
         expected_completion_date=getattr(case, "expected_completion_date", None),
         created_by=case.created_by,
         assigned_users=assigned_users,
@@ -117,6 +119,7 @@ async def create_case(
         client_id=payload.client_id,
         status=payload.status,
         priority=payload.priority,
+        practice_area=payload.practice_area.value,
         expected_completion_date=payload.expected_completion_date,
         created_by=current_user.id,
         created_at=now,
@@ -151,6 +154,11 @@ async def create_case(
     return serialize_case(reloaded)
 
 
+@router.get("/practice-areas", response_model=list[str])
+async def case_practice_areas(current_user: User = Depends(role_guard(ALLOWED_STAFF))):
+    return [area.value for area in CasePracticeArea]
+
+
 @router.get("/query", response_model=CaseListResponse)
 async def query_cases(
     search: str | None = Query(default=None, min_length=1, max_length=100),
@@ -161,6 +169,7 @@ async def query_cases(
     created_to: date | None = Query(default=None),
     page: int = Query(default=1, ge=1),
     per_page: int = Query(default=10, ge=1, le=100),
+    priority: CasePriority | None = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(role_guard(ALLOWED_STAFF)),
 ):
@@ -171,6 +180,8 @@ async def query_cases(
     filters = [Case.organization_id == current_user.organization_id, accessible_case_condition(current_user)]
     if status_filter and status_filter != "all":
         filters.append(Case.status == status_filter)
+    if priority is not None:
+        filters.append(Case.priority == priority)
     if assigned_user_id is not None:
         assigned = select(CaseAssignment.case_id).where(CaseAssignment.user_id == assigned_user_id)
         filters.append(Case.id.in_(assigned))
