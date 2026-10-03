@@ -72,7 +72,6 @@ function Modal({ title, children, onClose }) {
 export default function CaseDetailPage() {
   const { id } = useParams();
   const [activeTab, setActiveTab] = useState("timeline");
-  const [menuOpenId, setMenuOpenId] = useState(null);
   const [search, setSearch] = useState("");
   const [item, setItem] = useState(null);
   const [clients, setClients] = useState([]);
@@ -99,7 +98,6 @@ export default function CaseDetailPage() {
   const [page, setPage] = useState(1);
 
   const [modalType, setModalType] = useState("");
-  const [selectedRow, setSelectedRow] = useState(null);
   const [selectedDocument, setSelectedDocument] = useState(null);
   const [eventForm, setEventForm] = useState(EMPTY_EVENT);
   const [submitting, setSubmitting] = useState(false);
@@ -167,21 +165,9 @@ export default function CaseDetailPage() {
     if (new URLSearchParams(window.location.search).get("tab") === "documents") setActiveTab("documents");
   }, [id]);
 
-  function openModal(type, row = null) {
-    setMenuOpenId(null);
+  function openModal(type) {
     setModalType(type);
-    setSelectedRow(row);
     if (type === "add") setEventForm(EMPTY_EVENT);
-    if (type === "edit" && row) {
-      setEventForm({
-        title: row.title || "",
-        event_type: row.eventType || "milestone",
-        event_date: row.eventDate ? new Date(row.eventDate).toISOString().slice(0, 10) : "",
-        completed: row.completed === "Yes",
-        status: row.status || "active",
-        description: row.description || "",
-      });
-    }
   }
 
   async function createEvent(e) {
@@ -201,58 +187,6 @@ export default function CaseDetailPage() {
       await loadTimeline();
     } catch (err) {
       setError(err.message || "Failed to create timeline event");
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  async function updateEvent(e) {
-    e.preventDefault();
-    if (!selectedRow) return;
-    setSubmitting(true);
-    setError("");
-    try {
-      await apiRequest(`/api/v1/cases/${id}/timeline/${selectedRow.id}`, {
-        method: "PATCH",
-        body: JSON.stringify(eventForm),
-      });
-      setModalType("");
-      await loadTimeline();
-    } catch (err) {
-      setError(err.message || "Failed to update timeline event");
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  async function deleteEvent() {
-    if (!selectedRow) return;
-    setSubmitting(true);
-    setError("");
-    try {
-      await apiRequest(`/api/v1/cases/${id}/timeline/${selectedRow.id}`, { method: "DELETE" });
-      setModalType("");
-      await loadTimeline();
-    } catch (err) {
-      setError(err.message || "Failed to delete timeline event");
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  async function lockEvent() {
-    if (!selectedRow) return;
-    setSubmitting(true);
-    setError("");
-    try {
-      await apiRequest(`/api/v1/cases/${id}/timeline/${selectedRow.id}`, {
-        method: "PATCH",
-        body: JSON.stringify({ locked: true }),
-      });
-      setModalType("");
-      await loadTimeline();
-    } catch (err) {
-      setError(err.message || "Failed to lock timeline event");
     } finally {
       setSubmitting(false);
     }
@@ -436,7 +370,6 @@ export default function CaseDetailPage() {
   }
 
   async function openTextEditor(doc) {
-    setMenuOpenId(null);
     setError("");
     setDocumentMessage("");
     setTextTarget(doc);
@@ -620,10 +553,10 @@ export default function CaseDetailPage() {
                   </div>
                 </div>
 
-                <div className="vilo-table-wrap case-table-wrap case-table-wrap--menu-visible">
+                <div className="vilo-table-wrap case-table-wrap">
                   <table className="team-table case-timeline-table">
                     <thead>
-                      <tr><th>Title</th><th>Event Type</th><th>Event Date</th><th>Time</th><th>User</th><th>Actions</th></tr>
+                      <tr><th>Title</th><th>Event Type</th><th>Event Date</th><th>Time</th><th>User</th></tr>
                     </thead>
                     <tbody>
                       {paginatedRows.map((row) => (
@@ -633,19 +566,6 @@ export default function CaseDetailPage() {
                           <td className="timeline-date">{fmtDate(row.timestamp)}</td>
                           <td className="timeline-time">{formatTimelineTime(row.timestamp)}</td>
                           <td className="timeline-user">{row.actorName}</td>
-                          <td>
-                            <div className="vilo-table-actions case-row-actions" style={{ position: "relative" }}>
-                              <button className="vilo-btn vilo-btn--ghost vilo-btn--xs" onClick={() => setMenuOpenId(menuOpenId === row.id ? null : row.id)}>•••</button>
-                              {menuOpenId === row.id ? (
-                                <div className="case-actions-menu">
-                                  <button type="button" onClick={() => openModal("view", row)}>View</button>
-                                  <button type="button" onClick={() => openModal("edit", row)}>Edit</button>
-                                  <button type="button" onClick={() => openModal("lock", row)} disabled={row.locked}>{row.locked ? "Locked" : "Lock"}</button>
-                                  <button type="button" className="is-danger" onClick={() => openModal("delete", row)}>Delete</button>
-                                </div>
-                              ) : null}
-                            </div>
-                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -835,59 +755,6 @@ export default function CaseDetailPage() {
             <textarea placeholder="Description" value={eventForm.description} onChange={(e) => setEventForm((p) => ({ ...p, description: e.target.value }))} />
             <button className="vilo-btn vilo-btn--primary" type="submit" disabled={submitting}>{submitting ? "Saving..." : "Create Event"}</button>
           </form>
-        </Modal>
-      ) : null}
-
-      {modalType === "view" && selectedRow ? (
-        <Modal title="View Timeline Event" onClose={() => setModalType("")}>
-          <div className="vilo-form-grid">
-            <p><strong>Title:</strong> {selectedRow.title}</p>
-            <p><strong>Event Type:</strong> {formatTimelineEventType(selectedRow.eventType)}</p>
-            <p><strong>Event Date:</strong> {fmtDate(selectedRow.eventDate)}</p>
-            <p><strong>Completed:</strong> {selectedRow.completed}</p>
-            <p><strong>Status:</strong> {selectedRow.status}</p>
-            <p><strong>Description:</strong> {selectedRow.description || "-"}</p>
-            {selectedRow.metadata.document_id ? <Link className="vilo-btn vilo-btn--secondary" href={`/dashboard/documents?document_id=${encodeURIComponent(selectedRow.metadata.document_id)}`}>View Document</Link> : null}
-            {selectedRow.metadata.task_id ? <Link className="vilo-btn vilo-btn--secondary" href={`/dashboard/tasks/${encodeURIComponent(selectedRow.metadata.task_id)}`}>View Task</Link> : null}
-          </div>
-        </Modal>
-      ) : null}
-
-      {modalType === "edit" && selectedRow ? (
-        <Modal title="Edit Timeline Event" onClose={() => setModalType("")}>
-          <form className="vilo-form-grid" onSubmit={updateEvent}>
-            <input placeholder="Title" value={eventForm.title} onChange={(e) => setEventForm((p) => ({ ...p, title: e.target.value }))} required />
-            <select value={eventForm.event_type} onChange={(e) => setEventForm((p) => ({ ...p, event_type: e.target.value }))}>
-              {EVENT_TYPES.map((x) => <option key={x} value={x}>{x}</option>)}
-            </select>
-            <ViloDateInput value={eventForm.event_date} onChange={(value) => setEventForm((p) => ({ ...p, event_date: value }))} />
-            <select value={eventForm.status} onChange={(e) => setEventForm((p) => ({ ...p, status: e.target.value }))}>
-              {STATUS_TYPES.map((x) => <option key={x} value={x}>{x}</option>)}
-            </select>
-            <label><input type="checkbox" checked={eventForm.completed} onChange={(e) => setEventForm((p) => ({ ...p, completed: e.target.checked }))} /> Completed</label>
-            <textarea placeholder="Description" value={eventForm.description} onChange={(e) => setEventForm((p) => ({ ...p, description: e.target.value }))} />
-            <button className="vilo-btn vilo-btn--primary" type="submit" disabled={submitting}>{submitting ? "Saving..." : "Update Event"}</button>
-          </form>
-        </Modal>
-      ) : null}
-
-      {modalType === "delete" && selectedRow ? (
-        <Modal title="Delete Timeline Event" onClose={() => setModalType("")}>
-          <p>Are you sure you want to delete <strong>{selectedRow.title}</strong>?</p>
-          <div className="vilo-table-actions">
-            <button className="vilo-btn vilo-btn--danger" type="button" onClick={deleteEvent} disabled={submitting}>{submitting ? "Deleting..." : "Delete"}</button>
-            <button className="vilo-btn vilo-btn--secondary" type="button" onClick={() => setModalType("")}>Cancel</button>
-          </div>
-        </Modal>
-      ) : null}
-
-      {modalType === "lock" && selectedRow ? (
-        <Modal title="Lock Timeline Event" onClose={() => setModalType("")}>
-          <p>Lock <strong>{selectedRow.title}</strong>? This marks it as read-only in timeline metadata.</p>
-          <div className="vilo-table-actions">
-            <button className="vilo-btn vilo-btn--primary" type="button" onClick={lockEvent} disabled={submitting}>{submitting ? "Locking..." : "Lock"}</button>
-            <button className="vilo-btn vilo-btn--secondary" type="button" onClick={() => setModalType("")}>Cancel</button>
-          </div>
         </Modal>
       ) : null}
 

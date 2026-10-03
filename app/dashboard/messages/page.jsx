@@ -1,5 +1,6 @@
 "use client";
 
+import useMessageThreadScroll from "../../../hooks/useMessageThreadScroll";
 import MessageReceipt from "../../../components/MessageReceipt";
 
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
@@ -158,7 +159,6 @@ function MessagesPageContent() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const threadEndRef = useRef(null);
   const firstMessageRef = useRef(null);
   const selectedRef = useRef(null);
   const threadVisible = useRef(true);
@@ -219,6 +219,8 @@ function MessagesPageContent() {
   const [showAddParticipant, setShowAddParticipant] = useState(false);
   const [participantActionLoading, setParticipantActionLoading] = useState(false);
 
+  const { threadRef, threadContentRef, threadEndRef, onThreadScroll, jumpToLatest, prepareLatest, hasNewMessages } =
+    useMessageThreadScroll(selected?.id, messages, messagesLoading);
   selectedRef.current = selected;
   threadVisible.current = !showCreateModal && !showCasePicker;
 
@@ -436,9 +438,6 @@ function MessagesPageContent() {
       .catch((err) => setError(err.message || "Failed to load messages"));
   }, [selected?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => {
-    threadEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [messages, selected?.id]);
 
   useEffect(() => {
     if (!showCreateModal) return;
@@ -521,6 +520,7 @@ function MessagesPageContent() {
   }
 
   function openConversation(conv) {
+    jumpToLatest();
     selectedRef.current = conv;
     setSelected(conv);
     updateRoute({ conversation: conv.id, create: null });
@@ -750,8 +750,9 @@ function MessagesPageContent() {
       setAttachments([]);
       setMessageBody("");
       setComposerRefs([]);
+      prepareLatest();
       await loadConversations(selected.id);
-      await loadMessages(selected.id);
+      await loadMessages(selected.id, true);
     } catch (err) {
       setSendError(err.message || "Failed to send message");
     } finally {
@@ -871,7 +872,8 @@ function MessagesPageContent() {
                   </div>
                 </div>
 
-                <div className="messages-thread__body">
+                <div className="messages-thread__body" ref={threadRef} onScroll={onThreadScroll}>
+                  <div ref={threadContentRef}>
                   {messagesLoading ? (
                     <div className="messages-empty-state messages-empty-state--thread">
                       <strong>Loading messages</strong>
@@ -931,6 +933,8 @@ function MessagesPageContent() {
                     );
                   }) : null}
                   <div ref={threadEndRef} />
+                  </div>
+                  {hasNewMessages ? <div className="messages-jump-latest"><button type="button" onClick={jumpToLatest} aria-label="Jump to latest message">New messages ↓</button></div> : null}
                 </div>
 
                 <form className="messages-thread__composer" onSubmit={sendMessage}>

@@ -17,31 +17,59 @@ def test_receipt_is_outside_bubble_and_timestamp_inside(surface):
     assert re.search(r'message-bubble__time">\{formatBubbleTime\(msg.created_at\)\}</span>\s*</div>\s*\{mine \? <MessageReceipt status=\{msg.delivery_status\} readAt=\{msg.read_at\}', source)
     receipt = (ROOT / "components/MessageReceipt.jsx").read_text()
     assert 'status === "read" && Boolean(readAt)' in receipt
-    assert 'delivered ? "✓✓" : "✓"' in receipt
-    assert '`Read ${time}`' in receipt
-    assert 'aria-label={label}' in receipt
+    assert 'if (!read) return null' in receipt
+    assert '>Read</span>' in receipt
+    assert 'aria-label={`Read at ${time}`}' in receipt
+    assert 'message-receipt__label' in receipt
+    assert 'message-receipt__time' in receipt
+    assert not any(text in receipt for text in ['✓', 'Delivered', 'Sent', '__ticks'])
     css = (ROOT / "app/globals.css").read_text()
-    assert '.message-receipt.is-read { color: #2583eb; }' in css
-    assert 'letter-spacing: -0.2em' not in css
+    assert '.message-receipt__label { color: #2583eb; }' in css
+    assert '.message-receipt__time { color: #667085; }' in css
+    assert 'min-width: min(10rem, 100%)' in css
 
 
-def test_timeline_columns_display_and_exact_actions():
+def test_timeline_columns_display_without_actions():
     source = (ROOT / "app/dashboard/cases/[id]/page.jsx").read_text()
     table = source.split('className="team-table case-timeline-table"', 1)[1].split('</table>', 1)[0]
-    assert re.findall(r'<th>(.*?)</th>', table) == ["Title", "Event Type", "Event Date", "Time", "User", "Actions"]
+    assert re.findall(r'<th>(.*?)</th>', table) == ["Title", "Event Type", "Event Date", "Time", "User"]
     assert '{formatTimelineEventType(row.eventType)}' in table
     assert '{fmtDate(row.timestamp)}' in table
     assert '{formatTimelineTime(row.timestamp)}' in table
     assert '{row.actorName}' in table
     assert 'actorName: entry.actor_name || "—"' in source
     assert 'timestamp: entry.created_at' in source
-    assert 'setMenuOpenId(menuOpenId === row.id ? null : row.id)' in table
-    assert 'openModal("view", row)' in table
-    assert 'document_id=${encodeURIComponent(selectedRow.metadata.document_id)}' in source
-    assert '/dashboard/tasks/${encodeURIComponent(selectedRow.metadata.task_id)}' in source
-    # Task panels and manual event forms still retain their existing controls.
+    assert table.count('<td') == 5
+    assert not any(text in table for text in ['Actions', '•••', 'openModal', 'case-actions-menu'])
+    assert not any(text in source for text in ['selectedRow', 'menuOpenId', 'updateEvent', 'deleteEvent', 'lockEvent', 'View Timeline Event'])
     assert '{labelize(t.status)}' in source
-    assert 'completed: row.completed === "Yes"' in source
+    assert 'onClick={() => viewDocument(doc)}' in source
+    assert 'onClick={() => downloadDocument(doc.id)}' in source
+    priority = (ROOT / 'components/dashboard/TodaysOverview.jsx').read_text()
+    assert 'priority-timeline-action-menu' in priority
+
+
+@pytest.mark.parametrize("surface", ["dashboard", "portal"])
+def test_shared_scroll_strategy_and_neutral_entry(surface):
+    source = (ROOT / f"app/{surface}/messages/page.jsx").read_text()
+    assert 'useMessageThreadScroll(selected?.id, messages, messagesLoading)' in source
+    assert 'ref={threadRef} onScroll={onThreadScroll}' in source
+    assert 'prepareLatest();' in source
+    assert 'await loadMessages(selected.id, true)' in source
+    assert 'aria-label="Jump to latest message"' in source
+    assert 'hasNewMessages ?' in source
+    assert 'scrollIntoView' not in source
+    assert '<div ref={threadEndRef} />' in source
+    assert 'mark-read?read_through=' in source
+    hook = (ROOT / 'hooks/useMessageThreadScroll.js').read_text()
+    assert 'MESSAGE_BOTTOM_THRESHOLD = 80' in hook
+    assert 'previous.current.conversationId !== conversationId' in hook
+    assert 'if (!conversationId || loading) return' in hook
+    assert 'if (pinned.current) scrollLatest();' in hook
+    assert 'else if (added) setHasNewMessages(true)' in hook
+    assert 'pinned.current = isNearBottom(container)' in hook
+    assert 'new ResizeObserver' in hook
+    assert 'window.scroll' not in hook
 
 
 def test_event_formatters_known_types_fallback_and_local_time():

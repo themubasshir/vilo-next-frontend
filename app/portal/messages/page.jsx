@@ -1,5 +1,6 @@
 "use client";
 
+import useMessageThreadScroll from "../../../hooks/useMessageThreadScroll";
 import MessageReceipt from "../../../components/MessageReceipt";
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -113,9 +114,10 @@ export default function PortalMessagesPage() {
   const [error, setError] = useState("");
   const [sendError, setSendError] = useState("");
   const [meId, setMeId] = useState(null);
-  const threadEndRef = useRef(null);
   const selectedRef = useRef(null);
   const threadRequest = useRef(false);
+  const { threadRef, threadContentRef, threadEndRef, onThreadScroll, jumpToLatest, prepareLatest, hasNewMessages } =
+    useMessageThreadScroll(selected?.id, messages, messagesLoading);
   selectedRef.current = selected;
 
   async function loadConversations() {
@@ -171,9 +173,6 @@ export default function PortalMessagesPage() {
     };
   }, []);
 
-  useEffect(() => {
-    threadEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [messages, selected?.id]);
 
   async function sendMessage(e) {
     e.preventDefault();
@@ -188,8 +187,9 @@ export default function PortalMessagesPage() {
       });
       setBody("");
       setComposerRefs([]);
+      prepareLatest();
       await loadConversations();
-      await loadMessages(selected.id);
+      await loadMessages(selected.id, true);
     } catch (err) {
       setSendError(err.message || "Failed to send message");
     } finally {
@@ -247,7 +247,7 @@ export default function PortalMessagesPage() {
                 </div>
               ) : null}
               {filteredConversations.map((conv) => (
-                <button key={conv.id} type="button" className={`messages-conversation-item${selected?.id === conv.id ? " is-active" : ""}`} onClick={() => setSelected(conv)}>
+                <button key={conv.id} type="button" className={`messages-conversation-item${selected?.id === conv.id ? " is-active" : ""}`} onClick={() => { selectedRef.current = conv; jumpToLatest(); setSelected(conv); }}>
                   <span className="messages-conversation-item__avatar">{getInitials(conv.title || "Conversation")}</span>
                   <span className="messages-conversation-item__main">
                     <span className="messages-conversation-item__top">
@@ -295,7 +295,8 @@ export default function PortalMessagesPage() {
                   </div>
                 </div>
 
-                <div className="messages-thread__body">
+                <div className="messages-thread__body" ref={threadRef} onScroll={onThreadScroll}>
+                  <div ref={threadContentRef}>
                   {messagesLoading ? (
                     <div className="messages-empty-state messages-empty-state--thread">
                       <strong>Loading messages</strong>
@@ -337,6 +338,8 @@ export default function PortalMessagesPage() {
                     );
                   }) : null}
                   <div ref={threadEndRef} />
+                  </div>
+                  {hasNewMessages ? <div className="messages-jump-latest"><button type="button" onClick={jumpToLatest} aria-label="Jump to latest message">New messages ↓</button></div> : null}
                 </div>
 
                 <form className="messages-thread__composer" onSubmit={sendMessage}>

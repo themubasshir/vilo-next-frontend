@@ -10920,8 +10920,17 @@ button {
   font-size: 0.72rem;
   line-height: 1.3;
 }
-.message-receipt__ticks { letter-spacing: 0.04em; }
-.message-receipt.is-read { color: #2583eb; }
+.message-receipt__label { color: #2583eb; }
+.message-receipt__time { color: #667085; }
+.messages-thread__body { overflow-anchor: none; min-height: 0; }
+.messages-layout--portal { height: 72dvh; min-height: 0; }
+@media (max-width: 840px) {
+  .messages-layout--portal { height: auto; }
+  .messages-layout--portal .messages-thread { height: 72dvh; min-height: 0; }
+  .messages-layout--portal .messages-sidebar { max-height: 280px; }
+}
+.messages-jump-latest { position: sticky; bottom: 0; height: 0; display: flex; justify-content: center; }
+.messages-jump-latest button { transform: translateY(-100%); border: 1px solid #ded9f4; border-radius: 999px; background: #fff; color: #6351d8; padding: 0.45rem 0.8rem; box-shadow: 0 2px 8px #25204418; cursor: pointer; }
 .case-timeline-table .timeline-date,
 .case-timeline-table .timeline-time { white-space: nowrap; }
 .case-timeline-table .timeline-user { max-width: 12rem; overflow-wrap: anywhere; }
