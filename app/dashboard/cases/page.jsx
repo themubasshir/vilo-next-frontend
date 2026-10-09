@@ -52,6 +52,7 @@ function CasesPageContent() {
   const [statusFilter, setStatusFilter] = useState(searchParams.get("status") || "all");
   const [staffFilter, setStaffFilter] = useState(searchParams.get("assigned_user_id") || "");
   const [clientFilter, setClientFilter] = useState(searchParams.get("client_id") || "");
+  const [practiceAreaFilter, setPracticeAreaFilter] = useState(searchParams.get("practice_area") || "");
   const [createdFrom, setCreatedFrom] = useState(searchParams.get("created_from") || "");
   const [createdTo, setCreatedTo] = useState(searchParams.get("created_to") || "");
   const [searchDraft, setSearchDraft] = useState(searchParams.get("search") || "");
@@ -68,6 +69,7 @@ function CasesPageContent() {
     try {
       const params = new URLSearchParams({ page: String(page), per_page: String(perPage), status: statusFilter });
       if (priorityFilter) params.set("priority", priorityFilter);
+      if (practiceAreaFilter) params.set("practice_area", practiceAreaFilter);
       if (staffFilter) params.set("assigned_user_id", staffFilter);
       if (clientFilter) params.set("client_id", clientFilter);
       if (createdFrom) params.set("created_from", createdFrom);
@@ -103,10 +105,10 @@ function CasesPageContent() {
   useEffect(() => {
     loadCases();
     const params = new URLSearchParams(searchParams.toString());
-    [["priority", priorityFilter], ["status", statusFilter], ["assigned_user_id", staffFilter], ["client_id", clientFilter], ["created_from", createdFrom], ["created_to", createdTo], ["search", search]].forEach(([key, value]) => value ? params.set(key, value) : params.delete(key));
+    [["priority", priorityFilter], ["status", statusFilter], ["assigned_user_id", staffFilter], ["client_id", clientFilter], ["practice_area", practiceAreaFilter], ["created_from", createdFrom], ["created_to", createdTo], ["search", search]].forEach(([key, value]) => value ? params.set(key, value) : params.delete(key));
     page > 1 ? params.set("page", String(page)) : params.delete("page");
     router.replace(`/dashboard/cases${params.toString() ? `?${params.toString()}` : ""}`, { scroll: false });
-  }, [clientFilter, createdFrom, createdTo, page, perPage, priorityFilter, search, staffFilter, statusFilter]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [clientFilter, createdFrom, createdTo, page, perPage, practiceAreaFilter, priorityFilter, search, staffFilter, statusFilter]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function changeFilter(setter, value) {
     setPage(1);
@@ -118,6 +120,7 @@ function CasesPageContent() {
     setStatusFilter("all");
     setStaffFilter("");
     setClientFilter("");
+    setPracticeAreaFilter("");
     setCreatedFrom("");
     setCreatedTo("");
     setSearchDraft("");
@@ -377,6 +380,7 @@ function CasesPageContent() {
         <div className="cases-filter-grid">
           <label><span>Search</span><input type="search" value={searchDraft} onChange={(event) => changeFilter(setSearchDraft, event.target.value)} placeholder="Name, number, or client" /></label>
           <label><span>Priority</span><select value={priorityFilter} onChange={(event) => changeFilter(setPriorityFilter, event.target.value)}><option value="">All priorities</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select></label>
+          <label><span>Practice Area</span><select value={practiceAreaFilter} onChange={(event) => changeFilter(setPracticeAreaFilter, event.target.value)}><option value="">All Practice Areas</option>{practiceAreas.map((area) => <option key={area} value={area}>{area}</option>)}</select></label>
           <label><span>Assigned staff</span><select value={staffFilter} onChange={(event) => changeFilter(setStaffFilter, event.target.value)}><option value="">All staff</option>{team.map((member) => <option key={member.id} value={member.id}>{member.name}</option>)}</select></label>
           <label><span>Client</span><select value={clientFilter} onChange={(event) => changeFilter(setClientFilter, event.target.value)}><option value="">All clients</option>{clients.map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}</select></label>
           <label><span>Created from</span><ViloDateInput value={createdFrom} onChange={(value) => changeFilter(setCreatedFrom, value)} /></label>

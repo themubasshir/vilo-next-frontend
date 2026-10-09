@@ -170,6 +170,7 @@ async def query_cases(
     page: int = Query(default=1, ge=1),
     per_page: int = Query(default=10, ge=1, le=100),
     priority: CasePriority | None = None,
+    practice_area: CasePracticeArea | None = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(role_guard(ALLOWED_STAFF)),
 ):
@@ -182,6 +183,8 @@ async def query_cases(
         filters.append(Case.status == status_filter)
     if priority is not None:
         filters.append(Case.priority == priority)
+    if practice_area is not None:
+        filters.append(Case.practice_area == practice_area.value)
     if assigned_user_id is not None:
         assigned = select(CaseAssignment.case_id).where(CaseAssignment.user_id == assigned_user_id)
         filters.append(Case.id.in_(assigned))

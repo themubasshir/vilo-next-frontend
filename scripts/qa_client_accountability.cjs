@@ -27,7 +27,7 @@ const baseCase = {id:1,title:'Smith v Brown',practice_area:'Civil Litigation',cl
    let response=[];
    if(p==='/api/v1/auth/me')response=activeUser;
    else if(p==='/api/v1/cases/practice-areas')response=areas;
-   else if(p==='/api/v1/cases/query'){const priority=url.searchParams.get('priority');const rows=cases.filter(c=>!priority||c.priority===priority);response={items:rows,total:rows.length,total_pages:1,counts:[{status:'active',count:cases.length}]};}
+   else if(p==='/api/v1/cases/query'){const priority=url.searchParams.get('priority');const area=url.searchParams.get('practice_area');const rows=cases.filter(c=>(!priority||c.priority===priority)&&(!area||c.practice_area===area));response={items:rows,total:rows.length,total_pages:1,counts:[{status:'active',count:cases.length}]};}
    else if(p==='/api/v1/cases'&&req.method()==='POST'){created=req.postDataJSON();const c={...baseCase,...created,id:3};cases.push(c);response=c;}
    else if(p==='/api/v1/cases')response=cases;
    else if(p==='/api/v1/cases/1')response=baseCase;
@@ -132,7 +132,21 @@ const baseCase = {id:1,title:'Smith v Brown',practice_area:'Civil Litigation',cl
   await page.waitForFunction(()=>document.visibilityState==='visible');
   await page.addInitScript(()=>{Object.defineProperty(document,'visibilityState',{configurable:true,get:()=> 'visible'})});
   await page.goto(`${baseUrl}/dashboard/cases`);await page.getByRole('columnheader',{name:'Practice Area',exact:true}).waitFor();assert.equal(await page.getByRole('columnheader',{name:'Priority',exact:true}).count(),0);
-  await page.getByText('Civil Litigation',{exact:true}).waitFor();await page.locator('.cases-filter-grid select').filter({has:page.locator('option[value=high]')}).selectOption('high');await page.getByText('Historical File',{exact:true}).waitFor({state:'detached'});
+  await page.getByRole('cell',{name:'Civil Litigation',exact:true}).waitFor();await page.locator('.cases-filter-grid select').filter({has:page.locator('option[value=high]')}).selectOption('high');await page.getByText('Historical File',{exact:true}).waitFor({state:'detached'});
+  const queryRequests=()=>requests.filter(r=>r.path==='/api/v1/cases/query');
+  const waitForNewQuery=async(before)=>{const start=Date.now();while(Date.now()-start<5000){const fresh=queryRequests().slice(before).at(-1);if(fresh)return fresh;await new Promise(r=>setTimeout(r,50));}throw new Error('timed out waiting for cases/query request');};
+  const beforeCombined=queryRequests().length;
+  await page.locator('.cases-filter-grid select').filter({has:page.locator('option[value=\"Civil Litigation\"]')}).selectOption('Civil Litigation');
+  const combinedQuery=await waitForNewQuery(beforeCombined);
+  assert.equal(new URLSearchParams(combinedQuery.search).get('practice_area'),'Civil Litigation');
+  assert.equal(new URLSearchParams(combinedQuery.search).get('priority'),'high');
+  await page.getByText('Historical File',{exact:true}).waitFor({state:'detached'});assert.equal(await page.getByRole('cell',{name:'Smith v Brown',exact:true}).count(),1);
+  const beforeClear=queryRequests().length;
+  await page.getByRole('button',{name:'Clear filters',exact:true}).click();
+  const clearedQuery=await waitForNewQuery(beforeClear);
+  const clearedParams=new URLSearchParams(clearedQuery.search);
+  assert.equal(clearedParams.get('practice_area'),null);assert.equal(clearedParams.get('priority'),null);
+  await page.getByText('Historical File',{exact:true}).waitFor();
   await page.getByRole('button',{name:'+ New Case',exact:true}).click();
   await page.getByPlaceholder('Case title',{exact:true}).fill('Smith v Brown');
   assert.equal(await page.locator('.case-create-modal select').filter({has:page.locator('option[value=\"Civil Litigation\"]')}).evaluate(el=>el.checkValidity()),false);
@@ -174,7 +188,7 @@ const baseCase = {id:1,title:'Smith v Brown',practice_area:'Civil Litigation',cl
   await page.locator('.message-receipt.is-read').scrollIntoViewIfNeeded();await page.screenshot({path:`${artifactDir}/vilo-portal-receipts-${Math.round(zoom*100)}.png`});
   assert(marked>beforePortal);
   assert.deepEqual(errors,[]);
-  results.push({scale:zoom,checks:'refined receipts DOM placement/colors/alignment, long text and attachment, group fixture, latest open/reopen/send/pinned receive/history receive/indicator/portal scroll, five timeline columns/types/date/time/historical actors/no row actions; notification click and exact link, one document menu, hidden-tab and module-return read guards, Case Documents and Client Timeline editors, portal neutral entry and read-only receipt, document exact link, menu anchor/bounds/topmost/upward/Escape/outside-click/exact View, editor row/preview, neutral Messages/manual-open/read-only status/incoming exclusion, practice dropdown/create/title/details/table/priority filter',pass:true});
+  results.push({scale:zoom,checks:'refined receipts DOM placement/colors/alignment, long text and attachment, group fixture, latest open/reopen/send/pinned receive/history receive/indicator/portal scroll, five timeline columns/types/date/time/historical actors/no row actions; notification click and exact link, one document menu, hidden-tab and module-return read guards, Case Documents and Client Timeline editors, portal neutral entry and read-only receipt, document exact link, menu anchor/bounds/topmost/upward/Escape/outside-click/exact View, editor row/preview, neutral Messages/manual-open/read-only status/incoming exclusion, practice dropdown/create/title/details/table/priority filter and practice-area filter combine with priority plus clear filters reset',pass:true});
   await context.close();
  }
  await browser.close();fs.writeFileSync(`${artifactDir}/vilo_batch_browser_results.json`,JSON.stringify(results,null,2));console.log(JSON.stringify(results,null,2));
